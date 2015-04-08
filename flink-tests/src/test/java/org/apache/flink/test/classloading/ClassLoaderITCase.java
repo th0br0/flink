@@ -25,7 +25,6 @@ import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.test.testdata.KMeansData;
 import org.apache.flink.test.util.ForkableFlinkMiniCluster;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -51,11 +50,24 @@ public class ClassLoaderITCase {
 
 				PackagedProgram inputSplitTestProg = new PackagedProgram(new File(INPUT_SPLITS_PROG_JAR_FILE),
 						new String[] { INPUT_SPLITS_PROG_JAR_FILE,
+										"", // classpath
 										"localhost",
 										String.valueOf(port),
 										"4" // parallelism
 									} );
 				inputSplitTestProg.invokeInteractiveModeForExecution();
+
+
+
+				String classpath = new File(INPUT_SPLITS_PROG_JAR_FILE).toURI().toURL().toString();
+				PackagedProgram inputSplitTestProg2 = new PackagedProgram(new File(INPUT_SPLITS_PROG_JAR_FILE),
+						new String[] { "",
+										classpath, // classpath
+										"localhost",
+										String.valueOf(port),
+										"4" // parallelism
+									} );
+				inputSplitTestProg2.invokeInteractiveModeForExecution();
 
 				PackagedProgram streamingProg = new PackagedProgram(new File(STREAMING_PROG_JAR_FILE),
 						new String[] { STREAMING_PROG_JAR_FILE, "localhost", String.valueOf(port) } );

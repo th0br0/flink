@@ -19,6 +19,11 @@ package org.apache.flink.streaming.api.environment;
 
 import com.esotericsoftware.kryo.Serializer;
 import com.google.common.base.Preconditions;
+import java.io.Serializable;
+import java.net.URL;
+import java.util.Collection;
+import java.util.List;
+
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.InvalidProgramException;
 import org.apache.flink.api.common.JobExecutionResult;
@@ -1026,7 +1031,7 @@ public abstract class StreamExecutionEnvironment {
 	}
 
 	private static StreamExecutionEnvironment createContextEnvironment(Client client,
-			List<File> jars, int parallelism, boolean wait) {
+			List<URL> jars, int parallelism, boolean wait) {
 		return new StreamContextEnvironment(client, jars, parallelism, wait);
 	}
 

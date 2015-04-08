@@ -18,6 +18,10 @@
 
 package org.apache.flink.api.java;
 
+import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.Plan;
 import org.apache.flink.api.common.PlanExecutor;
@@ -34,7 +38,9 @@ public class RemoteEnvironment extends ExecutionEnvironment {
 	
 	protected final int port;
 	
-	private final String[] jarFiles;
+	private final URL[] jarFiles;
+	
+	private final URL[] globalClasspaths;
 	
 	/**
 	 * Creates a new RemoteEnvironment that points to the master (JobManager) described by the
@@ -45,8 +51,11 @@ public class RemoteEnvironment extends ExecutionEnvironment {
 	 * @param jarFiles The JAR files with code that needs to be shipped to the cluster. If the program uses
 	 *                 user-defined functions, user-defined input formats, or any libraries, those must be
 	 *                 provided in the JAR files.
-	 */	
-	public RemoteEnvironment(String host, int port, String... jarFiles) {
+	 * @param globalClasspaths The URLs of directories and JAR files that are added to each user code
+	 *                 classloader on all nodes in the cluster. Note that the paths must specify a 
+	 *                 protocol (e.g. file://) and be accessible on all nodes (e.g. by means of a NFS share).
+	 */
+	public RemoteEnvironment(String host, int port, String[] jarFiles, URL[] globalClasspaths) {
 		if (host == null) {
 			throw new NullPointerException("Host must not be null.");
 		}
@@ -57,15 +66,28 @@ public class RemoteEnvironment extends ExecutionEnvironment {
 		
 		this.host = host;
 		this.port = port;
-		this.jarFiles = jarFiles;
+		this.globalClasspaths = globalClasspaths;
+
+		if (jarFiles != null) {
+			this.jarFiles = new URL[jarFiles.length];
+			for (int i = 0; i < jarFiles.length; i++) {
+				try {
+					this.jarFiles[i] = new File(jarFiles[i]).getAbsoluteFile().toURI().toURL();
+				} catch (MalformedURLException e) {
+					throw new IllegalArgumentException("JAR file path invalid", e);
+				}
+			}
+		}
+		else {
+			this.jarFiles = null;
+		}
 	}
 	
 	
 	@Override
 	public JobExecutionResult execute(String jobName) throws Exception {
 		Plan p = createProgramPlan(jobName);
-		
-		PlanExecutor executor = PlanExecutor.createRemoteExecutor(host, port, jarFiles);
+		PlanExecutor executor = PlanExecutor.createRemoteExecutor(host, port, jarFiles, globalClasspaths);
 		executor.setPrintStatusDuringExecution(p.getExecutionConfig().isSysoutLoggingEnabled());
 
 		this.lastJobExecutionResult = executor.executePlan(p);
@@ -78,7 +100,7 @@ public class RemoteEnvironment extends ExecutionEnvironment {
 		p.setDefaultParallelism(getParallelism());
 		registerCachedFilesWithPlan(p);
 		
-		PlanExecutor executor = PlanExecutor.createRemoteExecutor(host, port, jarFiles);
+		PlanExecutor executor = PlanExecutor.createRemoteExecutor(host, port, jarFiles, globalClasspaths);
 		return executor.getOptimizerPlanAsJSON(p);
 	}
 
