@@ -25,14 +25,14 @@ import org.apache.flink.streaming.api.windowing.helper.Timestamp;
  * 
  * 1) Whenever an element arrives at the operator, the
  * {@link ActiveTriggerPolicy#preNotifyTrigger(Object)} method gets called
- * first. It can return zero ore more fake data points which will be added
+ * first. It can return zero or more fake data points which will be added
  * before the currently arrived real element gets processed. This allows to
- * handle empty windows in time based windowing with an user defined
+ * handle empty windows in time based windowing with a user defined
  * {@link Timestamp}. Triggers are not called on fake datapoint. A fake
  * datapoint is always considered as triggered.
  * 
  * 2) An active trigger has a factory method for a runnable. This factory method
- * gets called at the start up of the operator. The returned runnable will be
+ * gets called at the startup of the operator. The returned runnable will be
  * executed in its own thread and can submit fake elements at any time through an
  * {@link ActiveTriggerCallback}. This allows to have time based triggers based
  * on any system internal time measure. Triggers are not called on fake
@@ -46,15 +46,15 @@ public interface ActiveTriggerPolicy<DATA> extends TriggerPolicy<DATA> {
 	/**
 	 * Whenever an element arrives at the operator, the
 	 * {@link ActiveTriggerPolicy#preNotifyTrigger(Object)} method gets called
-	 * first. It can return zero ore more fake data points which will be added
-	 * before the the currently arrived real element gets processed. This allows
-	 * to handle empty windows in time based windowing with an user defined
+	 * first. It can return zero or more fake data points which will be added
+	 * before the currently arrived real element gets processed. This allows
+	 * to handle empty windows in time based windowing with a user defined
 	 * {@link Timestamp}. Triggers are not called on fake datapoints. A fake
 	 * datapoint is always considered as triggered.
 	 * 
 	 * @param datapoint
 	 *            the data point which arrived at the operator
-	 * @return zero ore more fake data points which will be added before the the
+	 * @return zero or more fake data points which will be added before the
 	 *         currently arrived real element gets processed.
 	 */
 	public Object[] preNotifyTrigger(DATA datapoint);

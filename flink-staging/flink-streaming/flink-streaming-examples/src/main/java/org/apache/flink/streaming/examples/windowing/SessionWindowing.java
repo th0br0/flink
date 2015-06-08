@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.examples.windowing;
 
 import org.apache.flink.api.java.tuple.Tuple3;
+//import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
@@ -53,9 +54,8 @@ public class SessionWindowing {
 //		// We expect to detect session "b" and "c" at this point as well
 //		input.add(new Tuple3<Long, Long, Integer>(2L, 11L, 1));
 
-		input.add(new Tuple3<Long, Long, Integer>(0L, 0L, 1));
+		input.add(new Tuple3<Long, Long, Integer>(0L, 0L, 1)); //////
 
-//<<<<<<< HEAD
 		DataStream<Tuple3<Long, Long, Integer>> source = env
 				.addSource(new SourceFunction<Tuple3<Long, Long, Integer>>() {
 					private static final long serialVersionUID = 1L;
@@ -69,7 +69,7 @@ public class SessionWindowing {
 								// before the next start for a specific id
 								ctx.collect(value);
 								if (!fileOutput) {
-									System.out.println("Collected: " + value);
+									//System.out.println("Collected: " + value);
 									//Thread.sleep(3000);
 								}
 							}
@@ -82,41 +82,7 @@ public class SessionWindowing {
 
 					@Override
 					public void cancel() {
-//=======
-//		DataStream<Tuple3<Long, Long, Integer>> source = env
-//				.addSource(new SourceFunction<Tuple3<Long, Long, Integer>>() {
-//					int index = 0;
-//					int c = 0;
-//
-//					@Override
-//					public boolean reachedEnd() throws Exception {
-//						//return index >= input.size();
-//						//return index == input.size() && c == 0;
-//						//return index == input.size() && c == 100;
-//						return false;
-//					}
-//
-//					@Override
-//					public Tuple3<Long, Long, Integer> next() throws Exception {
-//						if(index == input.size()) {
-//							c++;
-//							index = 0;
-//							for (int i = 0; i < input.size(); i++) {
-//								input.get(i).f0 += 3;
-//								input.get(i).f1 += 11;
-//							}
-//						}
-//
-//						Tuple3<Long, Long, Integer> result = input.get(index);
-//						index++;
-//
-//						if (!fileOutput) {
-//							System.out.println("Collected: " + result);
-//							//Thread.sleep(3000);
-//						}
-//						//return result;
-//						return result.copy();
-//>>>>>>> kiserletezes
+
 					}
 				});
 
@@ -131,6 +97,7 @@ public class SessionWindowing {
 		} else {
 			aggregated.print();
 		}
+		//aggregated.writeAsText("/tmp/x", FileSystem.WriteMode.OVERWRITE);
 
 		env.execute();
 	}
@@ -140,7 +107,8 @@ public class SessionWindowing {
 
 		private static final long serialVersionUID = 1L;
 
-		private volatile Long lastSeenEvent = 1L;
+		//private volatile Long lastSeenEvent = 1L;
+		private volatile Long lastSeenEvent = -1L;
 		private Long sessionTimeout;
 		private boolean sessionEnded = false;
 
@@ -156,6 +124,12 @@ public class SessionWindowing {
 			c1++;
 
 			Long eventTimestamp = datapoint.f1;
+
+			if(lastSeenEvent == -1) {
+				lastSeenEvent = eventTimestamp;
+				return false;
+			}
+
 			Long timeSinceLastEvent = eventTimestamp - lastSeenEvent;
 
 			// Update the last seen event time

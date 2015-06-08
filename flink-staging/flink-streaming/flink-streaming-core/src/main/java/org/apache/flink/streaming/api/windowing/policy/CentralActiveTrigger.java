@@ -20,9 +20,9 @@ package org.apache.flink.streaming.api.windowing.policy;
 /**
  * Interface for defining grouped windowing policies which can interact with
  * other groups to trigger on the latest available information globally
- * available to all groups.</p> At predefined time intervals the discretizers
+ * available to all groups.</p> At predefined time intervals the discretizer
  * takes the last globally seen element, and notifies all groups (but the one
- * that already have seen the object). This allows to trigger before an element
+ * that have already seen the object). This allows to trigger before an element
  * comes from the next window for a specific group. This pattern can be
  * used for instance in time policies to regularly broadcast the current time to
  * all groups.
@@ -37,7 +37,7 @@ public interface CentralActiveTrigger<DATA> extends CloneableTriggerPolicy<DATA>
 	 * 
 	 * @param datapoint
 	 *            The last globally seen data
-	 * @return An object of fake elements. If returned null or empty list, no
+	 * @return An array of fake elements. If null or empty list is returned, no
 	 *         triggers will occur.
 	 */
 	public Object[] notifyOnLastGlobalElement(DATA datapoint);

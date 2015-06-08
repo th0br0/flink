@@ -22,8 +22,8 @@ import org.apache.flink.api.java.tuple.Tuple2;
 
 /**
  * Type representing events sent to the window buffer. The first field should
- * contain the window element the second field encodes triggers and evictions if
- * the second field is greater than 0 it represents an eviction if it equals -1
+ * contain the window element the second field encodes triggers and evictions: if
+ * the second field is greater than 0 it represents an eviction; if it equals -1
  * it represents a trigger.
  */
 public class WindowEvent<T> extends Tuple2<T, Integer> {

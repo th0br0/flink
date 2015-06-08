@@ -87,7 +87,7 @@ public class TimeTriggerPolicy<DATA> implements ActiveTriggerPolicy<DATA>,
 	 * used the method returns null.
 	 * 
 	 * @param callback
-	 *            The object which is takes the callbacks for adding fake
+	 *            The object which takes the callbacks for adding fake
 	 *            elements out of the runnable.
 	 * @return A runnable is returned which triggers based on the current system
 	 *         time. If any other time measure is used the method return null.
@@ -197,7 +197,7 @@ public class TimeTriggerPolicy<DATA> implements ActiveTriggerPolicy<DATA>,
 	@Override
 	public Object[] notifyOnLastGlobalElement(DATA datapoint) {
 		LinkedList<Object> fakeElements = new LinkedList<Object>();
-		// check if there is more then one window border missed
+		// check if there is more than one window border missed
 		// use > here. In case >= would fit, the regular call will do the job.
 		while (timestampWrapper.getTimestamp(datapoint) >= startTime + granularity) {
 			startTime += granularity;

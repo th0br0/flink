@@ -42,7 +42,7 @@ public class StreamDiscretizer<IN>
 	protected EvictionPolicy<IN> evictionPolicy;
 	private boolean isActiveTrigger;
 	private boolean isActiveEviction;
-	private int bufferSize = 0;
+	protected int bufferSize = 0;
 
 	private transient Thread activePolicyThread;
 
@@ -72,7 +72,7 @@ public class StreamDiscretizer<IN>
 	}
 
 	/**
-	 * This method processed an arrived real element The method is synchronized
+	 * This method processes an arrived real element. The method is synchronized
 	 * to ensure that it cannot interleave with
 	 * {@link StreamDiscretizer#triggerOnFakeElement(Object)}
 	 * 
@@ -107,7 +107,7 @@ public class StreamDiscretizer<IN>
 	}
 
 	/**
-	 * This method triggers on an arrived fake element The method is
+	 * This method triggers on an arrived fake element. The method is
 	 * synchronized to ensure that it cannot interleave with
 	 * {@link StreamDiscretizer#processRealElement(Object)}
 	 * 

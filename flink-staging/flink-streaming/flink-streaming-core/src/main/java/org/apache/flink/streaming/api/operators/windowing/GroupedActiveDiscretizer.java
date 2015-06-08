@@ -22,6 +22,9 @@ import org.apache.flink.streaming.api.windowing.policy.CentralActiveTrigger;
 import org.apache.flink.streaming.api.windowing.policy.CloneableEvictionPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Map.Entry;
+import java.util.List;
+import java.util.ArrayList;
 
 public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 
@@ -110,6 +113,7 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 					Thread.sleep(2000);
 				} catch (InterruptedException e) {
 					// ignore it...
+					//System.out.println("korte");
 				}
 
 				try {
@@ -125,6 +129,16 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 									}
 								}
 							}
+
+							List<Object> toRemove = new ArrayList<Object>();
+							for(Entry<Object, StreamDiscretizer<IN>> e: groupedDiscretizers.entrySet()) {
+								if(e.getValue().bufferSize == 0) { //TODO: use getter instead
+									toRemove.add(e.getKey());
+								}
+							}
+							for(Object key: toRemove) {
+								groupedDiscretizers.remove(key);
+							}
 						}
 
 					}
@@ -133,6 +147,7 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 				}
 
 			}
+			//System.out.println("alma");
 		}
 	}
 }
