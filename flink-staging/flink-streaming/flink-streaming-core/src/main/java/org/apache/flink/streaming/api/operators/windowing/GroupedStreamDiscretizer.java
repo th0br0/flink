@@ -102,8 +102,13 @@ public class GroupedStreamDiscretizer<IN> extends StreamDiscretizer<IN> {
 		groupDiscretizer.setup(this.output, this.runtimeContext);
 		groupDiscretizer.open(this.parameters);
 
+		groupDiscretizer.setGrouper(this, key);
 
 		return groupDiscretizer;
+	}
+
+	public void removeGroup(Object key) {
+		groupedDiscretizers.remove(key);
 	}
 
 	@Override

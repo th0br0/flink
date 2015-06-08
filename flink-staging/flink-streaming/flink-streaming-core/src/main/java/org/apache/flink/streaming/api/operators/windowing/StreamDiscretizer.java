@@ -48,6 +48,14 @@ public class StreamDiscretizer<IN>
 
 	protected WindowEvent<IN> windowEvent = new WindowEvent<IN>();
 
+	private GroupedStreamDiscretizer<IN> grouper;
+	private Object groupKey;
+
+	protected void setGrouper(GroupedStreamDiscretizer<IN> grouper, Object groupKey) {
+		this.grouper = grouper;
+		this.groupKey = groupKey;
+	}
+
 	public StreamDiscretizer(TriggerPolicy<IN> triggerPolicy, EvictionPolicy<IN> evictionPolicy) {
 		this.triggerPolicy = triggerPolicy;
 		this.evictionPolicy = evictionPolicy;
@@ -122,6 +130,9 @@ public class StreamDiscretizer<IN>
 		} else {
 			emitWindow();
 			evict((IN) input, true);
+		}
+		if(grouper != null && bufferSize == 0) {
+			grouper.removeGroup(groupKey);
 		}
 	}
 

@@ -22,6 +22,8 @@ import org.apache.flink.streaming.api.windowing.policy.CentralActiveTrigger;
 import org.apache.flink.streaming.api.windowing.policy.CloneableEvictionPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.List;
+import java.util.ArrayList;
 
 public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 
@@ -32,6 +34,9 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 	private volatile IN last;
 	private Thread centralThread;
 	private CentralCheck centralCheck;
+
+	List<Object> toRemove = new ArrayList<Object>();
+	boolean iterationInProgress = false;
 
 	public GroupedActiveDiscretizer(KeySelector<IN, ?> keySelector,
 			CentralActiveTrigger<IN> triggerPolicy, CloneableEvictionPolicy<IN> evictionPolicy) {
@@ -47,7 +52,19 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 		groupDiscretizer.setup(this.output, this.runtimeContext);
 		// We omit the groupDiscretizer.open(...) call here to avoid starting
 		// new active threads
+
+		groupDiscretizer.setGrouper(this, key);
+
 		return groupDiscretizer;
+	}
+
+	@Override
+	public void removeGroup(Object key) {
+		if(!iterationInProgress) {
+			super.removeGroup(key);
+		} else {
+			toRemove.add(key);
+		}
 	}
 
 	@Override
@@ -115,6 +132,7 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 				try {
 					if (last != null) {
 						synchronized (groupedDiscretizers) {
+							iterationInProgress = true;
 							for (StreamDiscretizer<IN> group : groupedDiscretizers.values()) {
 
 								CentralActiveTrigger<IN> groupTrigger = (CentralActiveTrigger<IN>) group.triggerPolicy;
@@ -125,6 +143,11 @@ public class GroupedActiveDiscretizer<IN> extends GroupedStreamDiscretizer<IN> {
 									}
 								}
 							}
+							iterationInProgress = false;
+							for (Object key: toRemove) {
+								removeGroup(key);
+							}
+							toRemove.clear();
 						}
 
 					}
