@@ -23,7 +23,7 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>eu.stratosphere</groupId>
 		<artifactId>flink-parent</artifactId>
 		<version>0.9-SNAPSHOT</version>
 		<relativePath>..</relativePath>
@@ -36,85 +36,85 @@ under the License.
 	<dependencies>
 		<!-- BINARIES -->
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-core</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-java</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-scala</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-runtime</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-optimizer</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-clients</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-spargel</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-avro</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-java-examples</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-scala-examples</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-core</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-scala</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-language-binding-generic</artifactId>
 			<version>${project.version}</version>
 		</dependency>
                 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-python</artifactId>
 			<version>${project.version}</version>
 		</dependency>
@@ -139,7 +139,7 @@ under the License.
 
 			<dependencies>
 				<dependency>
-					<groupId>org.apache.flink</groupId>
+					<groupId>eu.stratosphere</groupId>
 					<artifactId>flink-scala-shell</artifactId>
 					<version>${project.version}</version>
 				</dependency>
@@ -155,7 +155,7 @@ under the License.
 			</activation>
 			<dependencies>
 				<dependency>
-					<groupId>org.apache.flink</groupId>
+					<groupId>eu.stratosphere</groupId>
 					<artifactId>flink-yarn</artifactId>
 					<version>${project.version}</version>
 				</dependency>

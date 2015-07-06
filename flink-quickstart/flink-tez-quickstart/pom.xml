@@ -25,7 +25,7 @@ under the License.
     </properties>
 
     <parent>
-        <groupId>org.apache.flink</groupId>
+        <groupId>eu.stratosphere</groupId>
         <artifactId>flink-quickstart</artifactId>
         <version>0.9-SNAPSHOT</version>
         <relativePath>..</relativePath>

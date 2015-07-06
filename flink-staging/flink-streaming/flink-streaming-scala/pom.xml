@@ -22,7 +22,7 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>eu.stratosphere</groupId>
 		<artifactId>flink-streaming-parent</artifactId>
 		<version>0.9-SNAPSHOT</version>
 		<relativePath>..</relativePath>
@@ -34,13 +34,13 @@ under the License.
 
 	<dependencies>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-core</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-scala</artifactId>
 			<version>${project.version}</version>
 		</dependency>
@@ -74,7 +74,7 @@ under the License.
 
 		<!-- To access general test utils -->
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-tests</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
@@ -83,7 +83,7 @@ under the License.
 
 		<!-- To access test data -->
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-test-utils</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
@@ -91,7 +91,7 @@ under the License.
 
 		<!-- To access streaming test utils -->
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-core</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>

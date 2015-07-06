@@ -23,7 +23,7 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>eu.stratosphere</groupId>
 		<artifactId>flink-parent</artifactId>
 		<version>0.9-SNAPSHOT</version>
 		<relativePath>..</relativePath>
@@ -36,7 +36,7 @@ under the License.
 
 	<dependencies>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>${shading-artifact.name}</artifactId>
 			<version>${project.version}</version>
 		</dependency>

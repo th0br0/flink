@@ -24,7 +24,7 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>eu.stratosphere</groupId>
 		<artifactId>flink-parent</artifactId>
 		<version>0.9-SNAPSHOT</version>
 		<relativePath>..</relativePath>
@@ -41,31 +41,31 @@ under the License.
 
 	<dependencies>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-core</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-test-utils</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-java</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-core</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-java-examples</artifactId>
 			<version>${project.version}</version>
 		</dependency>
@@ -116,7 +116,7 @@ under the License.
 						<configuration>
 							<artifactItems>
 								<artifactItem>
-									<groupId>org.apache.flink</groupId>
+									<groupId>eu.stratosphere</groupId>
 									<artifactId>flink-java-examples</artifactId>
 									<version>${project.version}</version>
 									<type>jar</type>

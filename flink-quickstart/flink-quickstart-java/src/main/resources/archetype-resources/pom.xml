@@ -72,17 +72,17 @@ under the License.
 
 	<dependencies>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-java</artifactId>
 			<version>0.9-SNAPSHOT</version>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-streaming-core</artifactId>
 			<version>0.9-SNAPSHOT</version>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>eu.stratosphere</groupId>
 			<artifactId>flink-clients</artifactId>
 			<version>0.9-SNAPSHOT</version>
 		</dependency>
@@ -311,19 +311,19 @@ under the License.
 			</activation>
 			<dependencies>
 				<dependency>
-					<groupId>org.apache.flink</groupId>
+					<groupId>eu.stratosphere</groupId>
 					<artifactId>flink-java</artifactId>
 					<version>0.9-SNAPSHOT</version>
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
-					<groupId>org.apache.flink</groupId>
+					<groupId>eu.stratosphere</groupId>
 					<artifactId>flink-streaming-core</artifactId>
 					<version>0.9-SNAPSHOT</version>
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
-					<groupId>org.apache.flink</groupId>
+					<groupId>eu.stratosphere</groupId>
 					<artifactId>flink-clients</artifactId>
 					<version>0.9-SNAPSHOT</version>
 					<scope>provided</scope>
