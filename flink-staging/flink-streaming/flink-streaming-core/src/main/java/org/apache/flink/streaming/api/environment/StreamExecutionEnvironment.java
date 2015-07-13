@@ -19,7 +19,6 @@ package org.apache.flink.streaming.api.environment;
 
 import com.esotericsoftware.kryo.Serializer;
 import com.google.common.base.Preconditions;
-import java.io.Serializable;
 import java.net.URL;
 import java.util.Collection;
 import java.util.List;
@@ -69,7 +68,6 @@ import org.apache.flink.types.StringValue;
 import org.apache.flink.util.NumberSequenceIterator;
 import org.apache.flink.util.SplittableIterator;
 
-import java.io.File;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;

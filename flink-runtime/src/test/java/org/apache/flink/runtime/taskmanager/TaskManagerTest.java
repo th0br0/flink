@@ -742,7 +742,8 @@ public class TaskManagerTest {
 						Tasks.AgnosticReceiver.class.getName(),
 						Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 						Collections.singletonList(igdd),
-						Collections.<BlobKey>emptyList(), 0);
+						Collections.<BlobKey>emptyList(),
+						Collections.<URL>emptyList(), 0);
 
 				new Within(d) {
 					@Override
@@ -824,7 +825,8 @@ public class TaskManagerTest {
 						Tasks.AgnosticReceiver.class.getName(),
 						Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 						Collections.singletonList(igdd),
-						Collections.<BlobKey>emptyList(), 0);
+						Collections.<BlobKey>emptyList(),
+						Collections.<URL>emptyList(), 0);
 
 				new Within(d) {
 					@Override
