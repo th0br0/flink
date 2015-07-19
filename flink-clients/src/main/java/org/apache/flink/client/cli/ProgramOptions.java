@@ -19,11 +19,19 @@ package org.apache.flink.client.cli;
 
 import org.apache.commons.cli.CommandLine;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.MalformedURLException;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import static org.apache.flink.client.cli.CliFrontendParser.ARGS_OPTION;
 import static org.apache.flink.client.cli.CliFrontendParser.JAR_OPTION;
 import static org.apache.flink.client.cli.CliFrontendParser.CLASS_OPTION;
+import static org.apache.flink.client.cli.CliFrontendParser.CLASSPATH_OPTION;
 import static org.apache.flink.client.cli.CliFrontendParser.PARALLELISM_OPTION;
 
 /**
@@ -34,6 +42,8 @@ public abstract class ProgramOptions extends CommandLineOptions {
 	private final String jarFilePath;
 
 	private final String entryPointClass;
+
+	private final URL[] classPath;
 
 	private final String[] programArgs;
 
@@ -58,6 +68,28 @@ public abstract class ProgramOptions extends CommandLineOptions {
 		}
 
 		this.programArgs = args;
+
+		List<URL> classpath = new ArrayList<URL>();
+		if (line.hasOption(CLASSPATH_OPTION.getOpt())) {
+			for (String path : line.getOptionValues(CLASSPATH_OPTION.getOpt())) {
+				try {
+					URL url = null;
+					if (path.startsWith("file:")) {
+						url = new URI(path).toURL();
+					} else {
+						url = Paths.get(path).normalize().toUri().toURL();
+					}
+					classpath.add(url);
+				} catch (MalformedURLException e) {
+					throw new CliArgsException("Bad syntax for classpath: " + path);
+				}catch (IllegalArgumentException e) {
+					throw new CliArgsException("Bad syntax for classpath: " + path);
+				} catch (URISyntaxException e) {
+					throw new CliArgsException("Bad syntax for classpath: " + path);
+				}
+			}
+		}
+		this.classPath = classpath.toArray(new URL[classpath.size()]);
 
 		this.entryPointClass = line.hasOption(CLASS_OPTION.getOpt()) ?
 				line.getOptionValue(CLASS_OPTION.getOpt()) : null;
@@ -85,6 +117,10 @@ public abstract class ProgramOptions extends CommandLineOptions {
 
 	public String getEntryPointClassName() {
 		return entryPointClass;
+	}
+
+	public URL[] getClassPath() {
+		return classPath;
 	}
 
 	public String[] getProgramArgs() {

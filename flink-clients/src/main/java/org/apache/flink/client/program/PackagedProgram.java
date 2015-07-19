@@ -90,7 +90,7 @@ public class PackagedProgram {
 	/**
 	 * Creates an instance that wraps the plan defined in the jar file using the given
 	 * argument.
-	 * 
+	 *
 	 * @param jarFile
 	 *        The jar file which contains the plan and a Manifest which defines
 	 *        the program-class
@@ -102,7 +102,27 @@ public class PackagedProgram {
 	 *         may be a missing / wrong class or manifest files.
 	 */
 	public PackagedProgram(File jarFile, String... args) throws ProgramInvocationException {
-		this(jarFile, null, args);
+		this(jarFile, Collections.<URL>emptyList(), null, args);
+	}
+
+	/**
+	 * Creates an instance that wraps the plan defined in the jar file using the given
+	 * argument.
+	 * 
+	 * @param jarFile
+	 *        The jar file which contains the plan and a Manifest which defines
+	 *        the program-class
+	 * @param path
+	 *        An additional URL classpath to be used by the Program classloader.
+	 * @param args
+	 *        Optional. The arguments used to create the pact plan, depend on
+	 *        implementation of the pact plan. See getDescription().
+	 * @throws ProgramInvocationException
+	 *         This invocation is thrown if the Program can't be properly loaded. Causes
+	 *         may be a missing / wrong class or manifest files.
+	 */
+	public PackagedProgram(File jarFile, List<URL> path, String... args) throws ProgramInvocationException {
+		this(jarFile, path, null, args);
 	}
 
 	/**
@@ -123,6 +143,29 @@ public class PackagedProgram {
 	 *         may be a missing / wrong class or manifest files.
 	 */
 	public PackagedProgram(File jarFile, String entryPointClassName, String... args) throws ProgramInvocationException {
+		this(jarFile, Collections.<URL>emptyList(), entryPointClassName, args);
+	}
+
+	/**
+	 * Creates an instance that wraps the plan defined in the jar file using the given
+	 * arguments. For generating the plan the class defined in the className parameter
+	 * is used.
+	 * 
+	 * @param jarFile
+	 *        The jar file which contains the plan.
+	 * @param path
+	 *        An additional URL classpath to be used by the Program classloader.
+	 * @param entryPointClassName
+	 *        Name of the class which generates the plan. Overrides the class defined
+	 *        in the jar file manifest
+	 * @param args
+	 *        Optional. The arguments used to create the pact plan, depend on
+	 *        implementation of the pact plan. See getDescription().
+	 * @throws ProgramInvocationException
+	 *         This invocation is thrown if the Program can't be properly loaded. Causes
+	 *         may be a missing / wrong class or manifest files.
+	 */
+	public PackagedProgram(File jarFile, List<URL> path, String entryPointClassName, String... args) throws ProgramInvocationException {
 		if (jarFile == null) {
 			throw new IllegalArgumentException("The jar file must not be null.");
 		}
@@ -146,7 +189,7 @@ public class PackagedProgram {
 		
 		// now that we have an entry point, we can extract the nested jar files (if any)
 		this.extractedTempLibraries = extractContainedLibaries(jarFileUrl);
-		this.userCodeClassLoader = JobWithJars.buildUserCodeClassLoader(getAllLibraries(), Collections.<URL>emptyList(), getClass().getClassLoader());
+		this.userCodeClassLoader = JobWithJars.buildUserCodeClassLoader(getAllLibraries(), path, getClass().getClassLoader());
 		
 		// load the entry point class
 		this.mainClass = loadMainClass(entryPointClassName, userCodeClassLoader);

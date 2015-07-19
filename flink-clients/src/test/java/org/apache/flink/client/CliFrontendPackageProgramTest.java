@@ -43,6 +43,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.FileNotFoundException;
+import java.net.URL;
 
 
 public class CliFrontendPackageProgramTest {
@@ -99,11 +100,17 @@ public class CliFrontendPackageProgramTest {
 	@Test
 	public void testVariantWithExplicitJarAndArgumentsOption() {
 		try {
-			String[] arguments = {"-j", getTestJarPath(), "-a", "--debug", "true", "arg1", "arg2"};
+			String[] arguments = {
+					"--classpath", "file:///tmp/foo",
+					"--classpath", "/tmp/bar",
+					"-j", getTestJarPath(),
+					"-a", "--debug", "true", "arg1", "arg2" };
+			URL[] classpath = new URL[] { new URL("file:///tmp/foo"), new URL("file:///tmp/bar") };
 			String[] reducedArguments = new String[] {"--debug", "true", "arg1", "arg2"};
 
 			RunOptions options = CliFrontendParser.parseRunCommand(arguments);
 			assertEquals(getTestJarPath(), options.getJarFilePath());
+			assertArrayEquals(classpath, options.getClassPath());
 			assertArrayEquals(reducedArguments, options.getProgramArgs());
 
 			CliFrontend frontend = new CliFrontend(CliFrontendTestUtils.getConfigDir());
@@ -121,11 +128,17 @@ public class CliFrontendPackageProgramTest {
 	@Test
 	public void testVariantWithExplicitJarAndNoArgumentsOption() {
 		try {
-			String[] arguments = {"-j", getTestJarPath(), "--debug", "true", "arg1", "arg2"};
+			String[] arguments = {
+					"--classpath", "file:///tmp/foo",
+					"--classpath", "/tmp/bar",
+					"-j", getTestJarPath(),
+					"--debug", "true", "arg1", "arg2" };
+			URL[] classpath = new URL[] { new URL("file:///tmp/foo"), new URL("file:///tmp/bar") };
 			String[] reducedArguments = new String[] {"--debug", "true", "arg1", "arg2"};
 
 			RunOptions options = CliFrontendParser.parseRunCommand(arguments);
 			assertEquals(getTestJarPath(), options.getJarFilePath());
+			assertArrayEquals(classpath, options.getClassPath());
 			assertArrayEquals(reducedArguments, options.getProgramArgs());
 
 			CliFrontend frontend = new CliFrontend(CliFrontendTestUtils.getConfigDir());
@@ -144,11 +157,17 @@ public class CliFrontendPackageProgramTest {
 	@Test
 	public void testValidVariantWithNoJarAndNoArgumentsOption() {
 		try {
-			String[] arguments = {getTestJarPath(), "--debug", "true", "arg1", "arg2"};
+			String[] arguments = {
+					"--classpath", "file:///tmp/foo",
+					"--classpath", "/tmp/bar",
+					getTestJarPath(),
+					"--debug", "true", "arg1", "arg2" };
+			URL[] classpath = new URL[] { new URL("file:///tmp/foo"), new URL("file:///tmp/bar") };
 			String[] reducedArguments = {"--debug", "true", "arg1", "arg2"};
 
 			RunOptions options = CliFrontendParser.parseRunCommand(arguments);
 			assertEquals(getTestJarPath(), options.getJarFilePath());
+			assertArrayEquals(classpath, options.getClassPath());
 			assertArrayEquals(reducedArguments, options.getProgramArgs());
 
 			CliFrontend frontend = new CliFrontend(CliFrontendTestUtils.getConfigDir());
@@ -179,11 +198,17 @@ public class CliFrontendPackageProgramTest {
 	@Test
 	public void testNonExistingFileWithArguments() {
 		try {
-			String[] arguments = {"/some/none/existing/path", "--debug", "true", "arg1", "arg2"};
+			String[] arguments = {
+					"--classpath", "file:///tmp/foo",
+					"--classpath", "/tmp/bar",
+					"/some/none/existing/path",
+					"--debug", "true", "arg1", "arg2"  };
+			URL[] classpath = new URL[] { new URL("file:///tmp/foo"), new URL("file:///tmp/bar") };
 			String[] reducedArguments = {"--debug", "true", "arg1", "arg2"};
 
 			RunOptions options = CliFrontendParser.parseRunCommand(arguments);
-			assertEquals(arguments[0], options.getJarFilePath());
+			assertEquals(arguments[4], options.getJarFilePath());
+			assertArrayEquals(classpath, options.getClassPath());
 			assertArrayEquals(reducedArguments, options.getProgramArgs());
 
 			CliFrontend frontend = new CliFrontend(CliFrontendTestUtils.getConfigDir());
@@ -264,15 +289,19 @@ public class CliFrontendPackageProgramTest {
 		final boolean[] callme = { false }; // create a final object reference, to be able to change its val later
 
 		try {
-			String[] arguments = {"-c", TEST_JAR_CLASSLOADERTEST_CLASS, getTestJarPath(),
+			String[] arguments = {
+					"--classpath", "file:///tmp/foo",
+					"--classpath", "/tmp/bar",
+					"-c", TEST_JAR_CLASSLOADERTEST_CLASS, getTestJarPath(),
 					"true", "arg1", "arg2" };
+			URL[] classpath = new URL[] { new URL("file:///tmp/foo"), new URL("file:///tmp/bar") };
+			String[] reducedArguments = { "true", "arg1", "arg2" };
 
-			String[] progArgs = { "true", "arg1", "arg2" };
-
-			InfoOptions options = CliFrontendParser.parseInfoCommand(arguments);
+			RunOptions options = CliFrontendParser.parseRunCommand(arguments);
 			assertEquals(getTestJarPath(), options.getJarFilePath());
+			assertArrayEquals(classpath, options.getClassPath());
 			assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS, options.getEntryPointClassName());
-			assertArrayEquals(progArgs, options.getProgramArgs());
+			assertArrayEquals(reducedArguments, options.getProgramArgs());
 			
 			CliFrontend frontend = new CliFrontend(CliFrontendTestUtils.getConfigDir());
 			PackagedProgram prog = spy(frontend.buildProgram(options));
@@ -291,7 +320,7 @@ public class CliFrontendPackageProgramTest {
 			when(prog.getUserCodeClassLoader()).thenReturn(testClassLoader);
 
 			assertEquals(TEST_JAR_CLASSLOADERTEST_CLASS, prog.getMainClassName());
-			assertArrayEquals(progArgs, prog.getArguments());
+			assertArrayEquals(reducedArguments, prog.getArguments());
 
 			Configuration c = new Configuration();
 			c.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY, "localhost");
