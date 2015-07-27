@@ -693,6 +693,10 @@ object ExecutionEnvironment {
    *                 user-defined functions, user-defined input formats, or any libraries,
    *                 those must be
    *                 provided in the JAR files.
+   * @param globalClasspaths The URLs of directories and JAR files that are added to each user code
+   *                 classloader on all nodes in the cluster. Note that the paths must specify a
+   *                 protocol (e.g. file://) and be accessible on all nodes (e.g. by means of a 
+   *                 NFS share).
    */
   def createRemoteEnvironment(
                                host: String,
