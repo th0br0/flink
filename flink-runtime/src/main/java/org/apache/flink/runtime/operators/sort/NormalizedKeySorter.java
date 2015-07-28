@@ -368,11 +368,21 @@ public final class NormalizedKeySorter<T> implements InMemorySorter<T> {
 
 	@Override
 	public int compare(int i, int j) {
-		final int bufferNumI = i / this.indexEntriesPerSegment;
-		final int segmentOffsetI = (i % this.indexEntriesPerSegment) * this.indexEntrySize;
-		
-		final int bufferNumJ = j / this.indexEntriesPerSegment;
-		final int segmentOffsetJ = (j % this.indexEntriesPerSegment) * this.indexEntrySize;
+//		final int bufferNumI = i / this.indexEntriesPerSegment;
+//		final int segmentOffsetI = (i % this.indexEntriesPerSegment) * this.indexEntrySize;
+//
+//		final int bufferNumJ = j / this.indexEntriesPerSegment;
+//		final int segmentOffsetJ = (j % this.indexEntriesPerSegment) * this.indexEntrySize;
+
+		//
+		final int bufferNumI = i >> 11;
+		final int segmentOffsetI = (i & 2047) * this.indexEntrySize;
+
+		final int bufferNumJ = j >> 11;
+		final int segmentOffsetJ = (j & 2047) * this.indexEntrySize;
+		//
+
+
 		
 		final MemorySegment segI = this.sortIndex.get(bufferNumI);
 		final MemorySegment segJ = this.sortIndex.get(bufferNumJ);
@@ -391,11 +401,21 @@ public final class NormalizedKeySorter<T> implements InMemorySorter<T> {
 
 	@Override
 	public void swap(int i, int j) {
-		final int bufferNumI = i / this.indexEntriesPerSegment;
-		final int segmentOffsetI = (i % this.indexEntriesPerSegment) * this.indexEntrySize;
-		
-		final int bufferNumJ = j / this.indexEntriesPerSegment;
-		final int segmentOffsetJ = (j % this.indexEntriesPerSegment) * this.indexEntrySize;
+//		final int bufferNumI = i / this.indexEntriesPerSegment;
+//		final int segmentOffsetI = (i % this.indexEntriesPerSegment) * this.indexEntrySize;
+//
+//		final int bufferNumJ = j / this.indexEntriesPerSegment;
+//		final int segmentOffsetJ = (j % this.indexEntriesPerSegment) * this.indexEntrySize;
+
+		//
+		final int bufferNumI = i >> 11;
+		final int segmentOffsetI = (i & 2047) * this.indexEntrySize;
+
+		final int bufferNumJ = j >> 11;
+		final int segmentOffsetJ = (j & 2047) * this.indexEntrySize;
+		//
+
+
 		
 		final MemorySegment segI = this.sortIndex.get(bufferNumI);
 		final MemorySegment segJ = this.sortIndex.get(bufferNumJ);

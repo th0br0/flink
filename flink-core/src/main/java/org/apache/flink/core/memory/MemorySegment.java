@@ -362,15 +362,15 @@ public class MemorySegment {
 	 */
 	@SuppressWarnings("restriction")
 	public final int getInt(int index) {
-		if (CHECKED) {
-			if (index >= 0 && index <= this.memory.length - 4) {
-				return UNSAFE.getInt(this.memory, BASE_OFFSET + index);
-			} else {
-				throw new IndexOutOfBoundsException();
-			}
-		} else {
+//		if (CHECKED) {
+//			if (index >= 0 && index <= this.memory.length - 4) {
+//				return UNSAFE.getInt(this.memory, BASE_OFFSET + index);
+//			} else {
+//				throw new IndexOutOfBoundsException();
+//			}
+//		} else {
 			return UNSAFE.getInt(this.memory, BASE_OFFSET + index);
-		}
+		//}
 	}
 	
 	/**
@@ -945,9 +945,22 @@ public class MemorySegment {
 	// -------------------------------------------------------------------------
 	
 	public static final int compare(MemorySegment seg1, MemorySegment seg2, int offset1, int offset2, int len) {
+		if(len >= 4) {
+			int c4 = seg2.getInt(offset2) - seg1.getInt(offset1);
+			if (c4 != 0) {
+				return c4;
+			}
+			offset1 += 4;
+			offset2 += 4;
+		}
+
+		return compare0(seg1, seg2, offset1, offset2, len);
+	}
+
+	private static int compare0(MemorySegment seg1, MemorySegment seg2, int offset1, int offset2, int len) {
 		final byte[] b1 = seg1.memory;
 		final byte[] b2 = seg2.memory;
-		
+
 		int val = 0;
 		for (int pos = 0; pos < len && (val = (b1[offset1 + pos] & 0xff) - (b2[offset2 + pos] & 0xff)) == 0; pos++);
 		return val;
