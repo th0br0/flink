@@ -81,7 +81,7 @@ public class GenericTypeInfo<T> extends TypeInformation<T> implements AtomicType
 			return (TypeComparator<T>) comparator;
 		}
 
-		throw new UnsupportedOperationException("Types that do not implement java.lang.Comparable cannot be used as keys.");
+		throw new UnsupportedOperationException("Types that do not implement java.lang.Comparable cannot be used as keys. (" + typeClass.getCanonicalName() + ")");
 	}
 
 	// --------------------------------------------------------------------------------------------
