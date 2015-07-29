@@ -58,8 +58,9 @@ public class VertexCentricConfiguration extends IterationConfiguration {
 	 * @param name The name under which the broadcast data is available in the messaging function.
 	 * @param data The data set to be broadcasted.
 	 */
-	public void addBroadcastSetForMessagingFunction(String name, DataSet<?> data) {
+	public VertexCentricConfiguration addBroadcastSetForMessagingFunction(String name, DataSet<?> data) {
 		this.bcVarsMessaging.add(new Tuple2<String, DataSet<?>>(name, data));
+		return this;
 	}
 
 	/**
@@ -68,8 +69,9 @@ public class VertexCentricConfiguration extends IterationConfiguration {
 	 * @param name The name under which the broadcast data is available in the vertex update function.
 	 * @param data The data set to be broadcasted.
 	 */
-	public void addBroadcastSetForUpdateFunction(String name, DataSet<?> data) {
+	public VertexCentricConfiguration addBroadcastSetForUpdateFunction(String name, DataSet<?> data) {
 		this.bcVarsUpdate.add(new Tuple2<String, DataSet<?>>(name, data));
+		return this;
 	}
 
 	/**
@@ -108,8 +110,9 @@ public class VertexCentricConfiguration extends IterationConfiguration {
 	 *
 	 * @param optDegrees True, to set this option, false otherwise.
 	 */
-	public void setOptDegrees(boolean optDegrees) {
+	public VertexCentricConfiguration setOptDegrees(boolean optDegrees) {
 		this.optDegrees = optDegrees;
+		return this;
 	}
 
 	/**
@@ -128,8 +131,9 @@ public class VertexCentricConfiguration extends IterationConfiguration {
 	 *
 	 * @param direction - IN, OUT or ALL
 	 */
-	public void setDirection(EdgeDirection direction) {
+	public VertexCentricConfiguration setDirection(EdgeDirection direction) {
 		this.direction = direction;
+		return this;
 	}
 
 }

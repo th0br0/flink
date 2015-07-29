@@ -72,6 +72,7 @@ under the License.
 		<module>flink-quickstart</module>
 		<module>flink-contrib</module>
 		<module>flink-dist</module>
+		<module>gg</module>
 	</modules>
 
 	<properties>
