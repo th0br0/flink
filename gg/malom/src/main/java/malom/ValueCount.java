@@ -23,4 +23,12 @@ public class ValueCount {
 	public boolean isCount(){
 		return count != -1;
 	}
+
+	@Override
+	public String toString() {
+		return "ValueCount{" +
+				"value=" + value +
+				", count=" + count +
+				'}';
+	}
 }
