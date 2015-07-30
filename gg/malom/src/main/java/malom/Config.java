@@ -1,5 +1,7 @@
 package malom;
 
+import org.apache.log4j.PropertyConfigurator;
+
 public class Config {
 	static String movegen_file = "/tmp/movegen";
 

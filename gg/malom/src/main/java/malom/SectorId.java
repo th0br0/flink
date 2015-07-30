@@ -18,12 +18,7 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		this((byte)w, (byte)b, (byte) wf, (byte) bf);
 	}
 
-	SectorId(){
-		this.w = -1;
-		this.b = -1;
-		this.wf = -1;
-		this.bf = -1;
-	}
+	public SectorId(){}
 
 	public void negate(){
 		byte tmp = w;
