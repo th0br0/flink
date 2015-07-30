@@ -50,6 +50,17 @@ public class Retrograde implements Serializable {
 
 		Graph<GameState, ValueCount, NullValue> g = Graph.fromDataSet(vertices, edges, env);
 
+//		//
+//		try {
+//			g.getVertices().print();
+//		} catch (Exception e) {
+//			throw new RuntimeException();
+//		}
+//		//
+
+		VertexCentricConfiguration config = new VertexCentricConfiguration();
+		config.setOptDegrees(true);
+
 		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Short>() {
 			@Override
 			public void updateVertex(Vertex<GameState, ValueCount> vertex, MessageIterator<Short> inMessages) throws Exception {
@@ -59,6 +70,7 @@ public class Retrograde implements Serializable {
 						if (msg % 2 == 1) { //nyeresbol terjesztunk
 							short newCount = (short) (vertex.getValue().count + 1);
 							if (newCount == getInDegree()) { //elfogyott a count
+							//if (newCount == -1) { //elfogyott a count
 								setNewVertexValue(ValueCount.value(msg + 1));
 							} else { //nem fogyott el a count
 								setNewVertexValue(ValueCount.count(newCount));
@@ -76,11 +88,13 @@ public class Retrograde implements Serializable {
 					sendMessageToAllNeighbors(vertex.getValue().value);
 				} else {
 					if (vertex.getValue().count == getInDegree()) { // state is blocked
+					//if (vertex.getValue().count == -1) { // state is blocked
 						sendMessageToAllNeighbors((short) 0);
 					}
 				}
 			}
-		}, 1000, new VertexCentricConfiguration().setOptDegrees(true));
+		//}, 1000, new VertexCentricConfiguration().setOptDegrees(false)); ///////////////////////////////////true
+		}, 1000, config);
 	}
 
 	private DataSet<GameState> createGameStates() {
