@@ -60,6 +60,7 @@ public class Retrograde implements Serializable {
 
 		VertexCentricConfiguration config = new VertexCentricConfiguration();
 		config.setOptDegrees(true);
+		//config.setSolutionSetUnmanagedMemory(true);
 
 		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Short>() {
 			@Override
@@ -70,13 +71,12 @@ public class Retrograde implements Serializable {
 						if (msg % 2 == 1) { //nyeresbol terjesztunk
 							short newCount = (short) (vertex.getValue().count + 1);
 							if (newCount == getInDegree()) { //elfogyott a count
-							//if (newCount == -1) { //elfogyott a count
 								setNewVertexValue(ValueCount.value(msg + 1));
 							} else { //nem fogyott el a count
 								setNewVertexValue(ValueCount.count(newCount));
 							}
 						} else { //vesztesbol terjesztunk
-							setNewVertexValue(ValueCount.value(msg + 1));
+							setNewVertexValue(ValueCount.value(msg + 1)); // This also handles the blocked self-msg case
 						}
 					}
 				}
@@ -87,9 +87,8 @@ public class Retrograde implements Serializable {
 				if (vertex.getValue().isValue()) {
 					sendMessageToAllNeighbors(vertex.getValue().value);
 				} else {
-					if (vertex.getValue().count == getInDegree()) { // state is blocked
-					//if (vertex.getValue().count == -1) { // state is blocked
-						sendMessageToAllNeighbors((short) 0);
+					if(getInDegree() == 0) { // state is blocked
+						sendMessageTo(vertex.getId(), (short)-1);
 					}
 				}
 			}
@@ -115,7 +114,7 @@ public class Retrograde implements Serializable {
 
 		@Override
 		public Vertex<GameState, ValueCount> map(GameState a) throws Exception {
-			if (a.sid.b + a.sid.bf <= 3 && movegen.can_close_mill(a)) {
+			if (a.sid.b + a.sid.bf <= 3 && movegen.can_close_mill(a)) { // win condition
 				return new Vertex<GameState, ValueCount>(a, ValueCount.value(1));
 			} else {
 				return new Vertex<GameState, ValueCount>(a, ValueCount.count(0)); //vigyazat! forditva megy!

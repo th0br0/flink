@@ -1,6 +1,11 @@
 package malom;
 
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.TypeExtractor;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.types.NullValue;
 
@@ -10,33 +15,26 @@ public class Solver {
 
 	public static void main(String[] args) throws Exception {
 
-//		/////
-//		GameState s1 = new GameState(new SectorId(1,1,0,0), 123L);
-//		GameState s2 = new GameState(new SectorId(1,1,0,0), 123L);
-//		System.out.println(s1.compareTo(s2));
-//		System.out.println(s1.equals(s2));
-//		if(0==0) return;
-//		/////
-
-
-
+		System.out.println("VIGYAZAT! adjmasks atirva! (de csak felig, a can_close_mill-ben nem)");
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(4);
 
-		///////double backChannelMemory = this.config.getDouble(ITERATION_HEAD_SOLUTION_SET_MEMORY, 0);
-		///////System.out.println(env.getConfig().getGlobalJobParameters().toMap());
 
 		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
-		sectors.add(new SectorId(3, 3, 0, 0)); ////////////////////////////////////////////
-		//sectors.add(new SectorId(1, 1, 0, 0)); ////////////////////////////////////////////
-		//sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0)); ////////////////////////////////////////////
+		//sectors.add(new SectorId(3, 3, 0, 0));
+		//sectors.add(new SectorId(1, 1, 0, 0));
+		//sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
+		sectors.add(new SectorId(1, 3, 0, 0)); sectors.add(new SectorId(3, 1, 0, 0));
 
+		//-Xmx6g -Xms6g
 
-		Retrograde retr33 = new Retrograde(sectors, env);
-		Graph<GameState, ValueCount, NullValue> res33 = retr33.run();
-		//res33.getVertices().print();
-		System.out.println(res33.getVertices().count());
+		Retrograde retr = new Retrograde(sectors, env);
+		Graph<GameState, ValueCount, NullValue> res = retr.run();
+		//res.getVertices().print();
+		//System.out.println(res.getVertices().count());
+		res.getVertices().writeAsText("/home/gabor/tmp/res.txt", FileSystem.WriteMode.OVERWRITE);
+		env.execute();
 	}
 }
