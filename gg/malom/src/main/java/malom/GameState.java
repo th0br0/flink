@@ -2,7 +2,7 @@ package malom;
 
 public class GameState implements Comparable<GameState> {
 	public SectorId sid;
-	public long board;
+	public long board; // 24 mezo van; az also 24 bit a feher korongok, a kovetkezo 24 bit a feketek
 
 	public GameState(SectorId sid, long board) {
 		this.sid = sid;
@@ -29,8 +29,20 @@ public class GameState implements Comparable<GameState> {
 		}
 	}
 
+
+	static final long mask24 = (1<<24) - 1;
+	static final long mask8 = (1<<8) - 1;
+
+	static private String toString24(long a) {
+		return
+				Long.toBinaryString((a>>16) & mask8) + " : " +
+				Long.toBinaryString((a>>8) & mask8) + " : " +
+				Long.toBinaryString(a & mask8);
+	}
+
 	@Override
 	public String toString() {
-		return sid.toString() + " " + Long.toBinaryString(board);
+		//return sid.toString() + " | " + Long.toBinaryString(board & mask24) + " | " + Long.toBinaryString(board >> 24);
+		return sid.toString() + " | " + toString24(board & mask24) + " | " + toString24(board >> 24);
 	}
 }

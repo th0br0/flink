@@ -5,7 +5,7 @@ import java.io.Serializable;
 public class SectorId implements Serializable, Comparable<SectorId> {
 	private static final long serialVersionUID = 1L;
 
-	public byte w, b, wf, bf;
+	public byte w, b, wf, bf; // feher es fekete font levo korongszamai, illetve feher es fekete altal meg felrakhato korongok szama
 
 	public SectorId(byte w, byte b, byte wf, byte bf) {
 		this.w = w;
@@ -80,6 +80,11 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		} else {
 			return false;
 		}
+	}
+
+	@Override
+	public int hashCode() {
+		return w | (b << 4) | (wf << 8) | (bf << 12);
 	}
 
 	public String toString(){

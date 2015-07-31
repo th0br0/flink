@@ -188,7 +188,8 @@ public class Movegen implements Serializable {
 		if(b+bf==Config.max_ksz)
 			cp^=cpmills; //ha b+bf max_ksz fole menne, akkor nem csinalhatunk vissza malombecsukast
 
-		int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
+		////int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
+		int[] adjmasks = slide_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
 
 		Adj adj = adjs[w][b][wf][bf];
 
