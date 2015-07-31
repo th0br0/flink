@@ -3,17 +3,20 @@ package malom;
 import java.io.Serializable;
 import java.util.Iterator;
 
+// Iterates over all elements in a sector.
 public class SectorElementIterator implements Iterator<GameState>, Serializable {
 	private static final long serialVersionUID = 1L;
 
-	SectorId s;
+	final SectorId s;
 
+	final int bl;
 	int w, b;
 
 	SectorElementIterator(SectorId s) {
 		this.s = s;
 		w = (1<<s.w) - 1;
 		b = (1<<s.b) - 1;
+		bl = 1<<(24-s.w);
 	}
 
 	@Override
@@ -23,10 +26,10 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 
 	@Override
 	public GameState next() {
-		GameState ret = new GameState(s, (long)w | ((long)b << 24));
+		GameState ret = new GameState(s, uncollapse(w, b));
 
 		b = nextChoose(b);
-		if(b >= 1<<24) {
+		if(b >= bl) {
 			b = (1<<s.b) - 1;
 			w = nextChoose(w);
 		}
@@ -39,4 +42,13 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 		return (((r^x)>>2)/c)|r;
 	}
 
+	private long uncollapse(int w, int b){
+		int r=0;
+		for(int i=1; i<1<<24; i<<=1)
+			if((w&i) != 0)
+				b<<=1;
+			else
+				r|=b&i;
+		return ((long)r<<24)|w;
+	}
 }
