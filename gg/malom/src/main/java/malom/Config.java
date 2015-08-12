@@ -7,4 +7,6 @@ public class Config {
 
 	static final int max_ksz = 9;
 	static final String variantName = "std";
+
+	static final boolean filterSym = false;
 }

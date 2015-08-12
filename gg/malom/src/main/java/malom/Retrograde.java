@@ -5,6 +5,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.Edge;
@@ -43,10 +44,16 @@ public class Retrograde implements Serializable {
 					@Override
 					public void flatMap(Vertex<GameState, ValueCount> v, Collector<Edge<GameState, NullValue>> out) throws Exception {
 						for (GameState parent : movegen.get_parents(v.getId())) {
-							out.collect(new Edge<GameState, NullValue>(v.getId(), parent, new NullValue()));
+							if(Config.filterSym) {
+								parent.board = Symmetries.minSym48(parent.board);
+							}
+							out.collect(new Edge<>(v.getId(), parent, new NullValue()));
 						}
 					}
 				});
+		if(Config.filterSym) {
+			edges = edges.distinct();
+		}
 
 		Graph<GameState, ValueCount, NullValue> g = Graph.fromDataSet(vertices, edges, env);
 
@@ -57,6 +64,7 @@ public class Retrograde implements Serializable {
 //			throw new RuntimeException();
 //		}
 //		//
+
 
 		VertexCentricConfiguration config = new VertexCentricConfiguration();
 		config.setOptDegrees(true);
@@ -85,14 +93,19 @@ public class Retrograde implements Serializable {
 			@Override
 			public void sendMessages(Vertex<GameState, ValueCount> vertex) throws Exception {
 				if (vertex.getValue().isValue()) {
-					sendMessageToAllNeighbors(vertex.getValue().value);
+					if(getSuperstepNumber() == 1) {
+						assert vertex.getValue().value == 1;
+						sendMessageTo(vertex.getId(), (short)0);
+					} else {
+						sendMessageToAllNeighbors(vertex.getValue().value);
+					}
 				} else {
 					if(getInDegree() == 0) { // state is blocked
-						sendMessageTo(vertex.getId(), (short)-1);
+						assert getSuperstepNumber() == 1;
+						sendMessageTo(vertex.getId(), (short) -1);
 					}
 				}
 			}
-		//}, 1000, new VertexCentricConfiguration().setOptDegrees(false)); ///////////////////////////////////true
 		}, 1000, config);
 	}
 
@@ -115,12 +128,10 @@ public class Retrograde implements Serializable {
 		@Override
 		public Vertex<GameState, ValueCount> map(GameState a) throws Exception {
 			if (a.sid.b + a.sid.bf <= 3 && movegen.can_close_mill(a)) { // win condition
-				return new Vertex<GameState, ValueCount>(a, ValueCount.value(1));
+				return new Vertex<>(a, ValueCount.value(1));
 			} else {
-				return new Vertex<GameState, ValueCount>(a, ValueCount.count(0)); //vigyazat! forditva megy!
+				return new Vertex<>(a, ValueCount.count(0)); //vigyazat! forditva megy!
 			}
 		}
 	}
-
-
 }
