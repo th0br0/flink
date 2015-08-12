@@ -1,6 +1,7 @@
 package malom;
 
 
+import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
@@ -35,14 +36,19 @@ public class Retrograde implements Serializable {
 	public Graph<GameState, ValueCount, NullValue> run() {
 		movegen = new Movegen(sectors); //Generates edges with targets only inside these sectors
 
-		DataSet<Vertex<GameState, ValueCount>> vertices =
-				createGameStates()
-						.map(new InitGameStateValue());
+		DataSet<GameState> gameStates = createGameStates();
+
+		if(Config.filterSym) {
+			gameStates = gameStates.filter(state -> !Symmetries.isFiltered(state.board));
+		}
+
+		DataSet<Vertex<GameState, ValueCount>> vertices = gameStates.map(new InitGameStateValue());
 
 		DataSet<Edge<GameState, NullValue>> edges =
 				vertices.flatMap(new FlatMapFunction<Vertex<GameState, ValueCount>, Edge<GameState, NullValue>>() {
 					@Override
 					public void flatMap(Vertex<GameState, ValueCount> v, Collector<Edge<GameState, NullValue>> out) throws Exception {
+						assert !Config.filterSym || !Symmetries.isFiltered(v.getId().board);
 						for (GameState parent : movegen.get_parents(v.getId())) {
 							if(Config.filterSym) {
 								parent.board = Symmetries.minSym48(parent.board);
@@ -95,7 +101,7 @@ public class Retrograde implements Serializable {
 				if (vertex.getValue().isValue()) {
 					if(getSuperstepNumber() == 1) {
 						assert vertex.getValue().value == 1;
-						sendMessageTo(vertex.getId(), (short)0);
+						sendMessageTo(vertex.getId(), (short) 0);
 					} else {
 						sendMessageToAllNeighbors(vertex.getValue().value);
 					}
@@ -103,6 +109,7 @@ public class Retrograde implements Serializable {
 					if(getInDegree() == 0) { // state is blocked
 						assert getSuperstepNumber() == 1;
 						sendMessageTo(vertex.getId(), (short) -1);
+						////sendMessageToAllNeighbors((short) 0);
 					}
 				}
 			}
