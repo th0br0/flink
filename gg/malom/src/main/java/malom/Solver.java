@@ -19,7 +19,7 @@ public class Solver {
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(4);
+		env.setParallelism(1);
 
 
 		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
