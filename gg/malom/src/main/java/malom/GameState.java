@@ -1,6 +1,10 @@
 package malom;
 
-public class GameState implements Comparable<GameState> {
+import java.io.Serializable;
+
+public class GameState implements Comparable<GameState>, Serializable {
+	private static final long serialVersionUID = 1L;
+
 	public SectorId sid;
 	public long board; // 24 mezo van; az also 24 bit a feher korongok, a kovetkezo 24 bit a feketek
 
