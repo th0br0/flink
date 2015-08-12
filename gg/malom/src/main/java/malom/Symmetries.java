@@ -25,11 +25,16 @@ package malom;
 public class Symmetries {
 
 	public static long minSym48(long a) {
+		// TODO: Could be sped up by lookuptables
 		long mi = Long.MAX_VALUE;
 		for(int i=0; i<16; i++) {
 			mi=Long.min(mi, sym48(i, a));
 		}
 		return mi;
+	}
+
+	public static boolean isFiltered(long a) {
+		return minSym48(a) < a;
 	}
 
 
