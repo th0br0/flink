@@ -11,43 +11,32 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 
 	int w, bc;
 	final int end;
-	GameState next;
 
 	SectorElementIterator(SectorId s) {
 		this.s = s;
 		w = (1<<s.w) - 1;
 		bc = (1<<s.b) - 1;
 		end = 1<<(24-s.w);
-		assembleNext();
 	}
 
 	@Override
 	public boolean hasNext() {
-		return next != null;
+		return bc < end;
 	}
 
 	@Override
 	public GameState next() {
-		GameState ret = next;
+		GameState ret = new GameState(s, uncollapse(w, bc));
 
-		do {
-			w = nextChoose(w);
-			if (w >= (1 << 24)) {
-				w = (1 << s.w) - 1;
-				bc = nextChoose(bc);
-			}
-			assembleNext();
-		} while(Config.filterSym && hasNext() && Symmetries.minSym48(next.board) < next.board);
+		// If too much time is spent here, then this can be sped up by not itreating on filtered out states
+		// (this would need the Gasser inv_hash)
+		w = nextChoose(w);
+		if (w >= (1 << 24)) {
+			w = (1 << s.w) - 1;
+			bc = nextChoose(bc);
+		}
 
 		return ret;
-	}
-
-	private void assembleNext() {
-		if(bc < end) {
-			next = new GameState(s, uncollapse(w, bc));
-		} else {
-			next = null;
-		}
 	}
 
 	private int nextChoose(int x){
