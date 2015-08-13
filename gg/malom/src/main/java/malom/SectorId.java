@@ -30,6 +30,14 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		bf = wf;
 	}
 
+	public boolean isLosing() {
+		return w + wf < 2; /////////////////////// 3
+	}
+
+	static public SectorId getNull() {
+		return new SectorId(-1, -1, -1, -1);
+	}
+
 //	boolean eks() {
 //		return *this==-*this;
 //	}

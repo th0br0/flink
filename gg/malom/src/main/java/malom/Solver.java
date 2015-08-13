@@ -23,6 +23,7 @@ public class Solver {
 	public static void main(String[] args) throws Exception {
 
 		System.out.println("VIGYAZAT! adjmasks atirva! (de csak felig, a can_close_mill-ben nem)");
+		System.out.println("VIGYAZAT! lose condition atirva!");
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -32,8 +33,8 @@ public class Solver {
 		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
 		//sectors.add(new SectorId(3, 3, 0, 0));
 		//sectors.add(new SectorId(1, 1, 0, 0));
-		//sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
-		sectors.add(new SectorId(1, 3, 0, 0)); sectors.add(new SectorId(3, 1, 0, 0));
+		sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
+		sectors.add(new SectorId(1, 3, 0, 0)); //sectors.add(new SectorId(3, 1, 0, 0));
 
 		//-Xmx6g -Xms6g
 
@@ -42,33 +43,34 @@ public class Solver {
 		//res.getVertices().print();
 		//System.out.println(res.getVertices().count());
 
-/*
+		Verify.verify(res);
+
 		res.getVertices().writeAsText("/home/gabor/tmp/res.txt", FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-*/
 
-		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
-		Map<Long, ValueCount> resMap = new TreeMap<>();
-		for(Vertex<GameState, ValueCount> v: resList) {
-			resMap.put(v.getId().board, v.getValue());
-		}
-		Map<Long, Integer> v32 = new HashMap<>();
-		for(Vertex<GameState, ValueCount> v: resList) {
-			if(resMap.get(Symmetries.minSym48(v.getId().board)).value != v.getValue().value) {
-				int a = 42;
-			}
 
-			if(v.getValue().value == 32) {
-				Long x = Symmetries.minSym48(v.getId().board);
-				if(!v32.containsKey(x)) {
-					v32.put(x, 1);
-				} else {
-					v32.put(x, v32.get(x) + 1);
-				}
-			}
-		}
-		for(Object l: v32.entrySet()) {
-			System.out.println(l);
-		}
+//		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
+//		Map<Long, ValueCount> resMap = new TreeMap<>();
+//		for(Vertex<GameState, ValueCount> v: resList) {
+//			resMap.put(v.getId().board, v.getValue());
+//		}
+//		Map<Long, Integer> v32 = new HashMap<>();
+//		for(Vertex<GameState, ValueCount> v: resList) {
+//			if(resMap.get(Symmetries.minSym48(v.getId().board)).value != v.getValue().value) {
+//				int a = 42;
+//			}
+//
+//			if(v.getValue().value == 32) {
+//				Long x = Symmetries.minSym48(v.getId().board);
+//				if(!v32.containsKey(x)) {
+//					v32.put(x, 1);
+//				} else {
+//					v32.put(x, v32.get(x) + 1);
+//				}
+//			}
+//		}
+//		for(Object l: v32.entrySet()) {
+//			System.out.println(l);
+//		}
 	}
 }

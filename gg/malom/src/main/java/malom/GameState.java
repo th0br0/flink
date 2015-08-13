@@ -44,9 +44,17 @@ public class GameState implements Comparable<GameState>, Serializable {
 				Long.toBinaryString(a & mask8);
 	}
 
+	static public GameState getNull(){
+		return new GameState(SectorId.getNull(), -1);
+	}
+
 	@Override
 	public String toString() {
-		//return sid.toString() + " | " + Long.toBinaryString(board & mask24) + " | " + Long.toBinaryString(board >> 24);
-		return sid.toString() + " | " + toString24(board & mask24) + " | " + toString24(board >> 24);
+		if(board != -1) {
+			//return sid.toString() + " | " + Long.toBinaryString(board & mask24) + " | " + Long.toBinaryString(board >> 24);
+			return sid.toString() + " | " + toString24(board & mask24) + " | " + toString24(board >> 24) + " [" + board + "]";
+		} else {
+			return "Nothing";
+		}
 	}
 }
