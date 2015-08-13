@@ -45,7 +45,7 @@ public class Retrograde implements Serializable {
 
 		movegen = new Movegen(sectors); // (Will generate edges with targets only inside these sectors)
 
-		// Create the vertices by unioning together all sectors
+		// Create the vertices by unioning all sectors
 		DataSet<GameState> gameStates = null;
 		for(SectorId s: sectors) {
 			DataSet<GameState> currentSectorGameStates = env.fromCollection(new SectorElementIterator(s), GameState.class);
@@ -92,40 +92,25 @@ public class Retrograde implements Serializable {
 
 		Graph<GameState, ValueCount, NullValue> g = Graph.fromDataSet(vertices, edges, env);
 
-
-		// Set blocked states to 0, and
-		// set those states to 1, where I can win by closing a mill
-		g = Graph.fromDataSet(g.getVertices().join(g.inDegrees()).where(0).equalTo(0).with(new JoinFunction<Vertex<GameState,ValueCount>, Tuple2<GameState,Long>, Vertex<GameState, ValueCount>>() {
+		
+		// Set losses to 0, and
+		// set others to count(deg)
+		g = Graph.fromDataSet(g.getVertices().join(g.inDegrees()).where(0).equalTo(0).with(new JoinFunction<Vertex<GameState, ValueCount>, Tuple2<GameState, Long>, Vertex<GameState, ValueCount>>() {
 			@Override
 			public Vertex<GameState, ValueCount> join(Vertex<GameState, ValueCount> v0, Tuple2<GameState, Long> deg0) throws Exception {
 				long deg = deg0.f1;
 				GameState v = v0.f0;
-				if(deg == 0) {
+				if (v.sid.isLosing()) {
 					return new Vertex<>(v, ValueCount.value(0));
 				} else {
-					if (v.sid.b + v.sid.bf <= 3 && movegen.can_close_mill(v)) {
-						return new Vertex<>(v, ValueCount.value(1));
-					} else {
-						return new Vertex<>(v, ValueCount.count((int)deg));
+					if (deg == 0) { // state is blocked
+						return new Vertex<>(v, ValueCount.value(0));
+					} else { // to be computed by the iteration (set to count for now)
+						return new Vertex<>(v, ValueCount.count((int) deg));
 					}
 				}
 			}
 		}), edges, env);
-
-		// Set those states to 1, where I can win by moving to a blocked (0 valued) state
-		g = Graph.fromDataSet(g.groupReduceOnNeighbors(
-				new NeighborsFunctionWithVertexValue<GameState, ValueCount, NullValue, Vertex<GameState, ValueCount>>() {
-			@Override
-			public void iterateNeighbors(Vertex<GameState, ValueCount> vertex, Iterable<Tuple2<Edge<GameState, NullValue>, Vertex<GameState, ValueCount>>> neighbors, Collector<Vertex<GameState, ValueCount>> out) throws Exception {
-				for (Tuple2<Edge<GameState, NullValue>, Vertex<GameState, ValueCount>> n: neighbors) {
-					if(n.f1.getValue().isValue() && n.f1.getValue().value == 0) {
-						out.collect(new Vertex<>(vertex.getId(), ValueCount.value(1)));
-						return;
-					}
-				}
-				out.collect(vertex);
-			}
-		}, EdgeDirection.IN), edges, env);
 
 
 		// The iteration
@@ -137,8 +122,15 @@ public class Retrograde implements Serializable {
 		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Short>() {
 			@Override
 			public void updateVertex(Vertex<GameState, ValueCount> vertex, MessageIterator<Short> inMessages) throws Exception {
+
+				///
+				if(vertex.getId().board == 1476395011L) {
+					int a = 42;
+				}
+				///
+
 				for (Short msg : inMessages) {
-					assert getSuperstepNumber() == msg;
+					assert getSuperstepNumber() == msg + 1;
 					if (vertex.getValue().isCount()) { //count-ba terjesztunk
 						if (msg % 2 == 1) { //nyeresbol terjesztunk
 							short newCount = (short) (vertex.getValue().count - 1);
@@ -148,7 +140,7 @@ public class Retrograde implements Serializable {
 								setNewVertexValue(ValueCount.count(newCount));
 							}
 						} else { //vesztesbol terjesztunk
-							setNewVertexValue(ValueCount.value(msg + 1)); // This also handles the blocked self-msg case
+							setNewVertexValue(ValueCount.value(msg + 1));
 						}
 					} else { //val-ba terjesztunk
 						assert vertex.getValue().value % 2 == 1;
@@ -159,12 +151,17 @@ public class Retrograde implements Serializable {
 		}, new MessagingFunction<GameState, ValueCount, Short, NullValue>() {
 			@Override
 			public void sendMessages(Vertex<GameState, ValueCount> vertex) throws Exception {
+
+				///!!!!! Ugy tunik, hogy az a gond, hogy ha tobbszor van setNewVertexValue hivva, akkor csak az elsonek az eredmenyet adja at a Gelly!!!!!!
+
+				///
+				if(vertex.getId().board == 1476395011L) {
+					int a = 42;
+				}
+				///
+
 				if (vertex.getValue().isValue()) {
-					if(vertex.getValue().value != 0) {
-						sendMessageToAllNeighbors(vertex.getValue().value);
-					} else {
-						assert getSuperstepNumber() == 1;
-					}
+					sendMessageToAllNeighbors(vertex.getValue().value);
 				}
 			}
 		}, 1000, config);
