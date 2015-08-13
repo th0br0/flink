@@ -25,8 +25,25 @@ public class ValueCount {
 	}
 
 	@Override
+	public boolean equals(Object o0) {
+		if(o0 instanceof ValueCount) {
+			ValueCount o = (ValueCount) o0;
+			if(isValue()) {
+				return o.isValue() && value == o.value;
+			} else if(isCount()){
+				return o.isCount() && count == o.count;
+			} else {
+				assert false;
+				return false;
+			}
+		} else {
+			return false;
+		}
+	}
+
+	@Override
 	public String toString() {
-		return "ValueCount{" +
+		return " ValueCount{" +
 				"value=" + value +
 				", count=" + count +
 				'}';

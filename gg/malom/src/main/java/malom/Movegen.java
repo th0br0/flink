@@ -146,10 +146,10 @@ public class Movegen implements Serializable {
 			byte w=s.w, b=s.b, wf=s.wf, bf=s.bf;
 			Adj a = new Adj();
 			SectorId
-					mozg = new SectorId(w,b,wf,bf), //wms_w_b_wf_bf
-					felrak = new SectorId((byte)(w-1), b, (byte)(wf+1), bf), //wms_wm_b_wfp_bf
-					mozg_kle = new SectorId(w, (byte)(b+1), wf, bf), //wms_w_bp_wf_bf
-					felrak_kle = new SectorId((byte)(w-1), (byte)(b+1), (byte)(wf+1), bf); //wms_wm_bp_wfp_bf
+					mozg = new SectorId(b,w,bf,wf), //wms_w_b_wf_bf
+					felrak = new SectorId((byte)(b-1), w, (byte)(bf+1), wf), //wms_wm_b_wfp_bf
+					mozg_kle = new SectorId(b, (byte)(w+1), bf, wf), //wms_w_bp_wf_bf
+					felrak_kle = new SectorId((byte)(b-1), (byte)(w+1), (byte)(bf+1), wf); //wms_wm_bp_wfp_bf
 			if(ids.contains(mozg)) a.mozg=mozg;
 			if(ids.contains(felrak)) a.felrak=felrak;
 			if(ids.contains(mozg_kle)) a.mozg_kle=mozg_kle;
@@ -168,6 +168,8 @@ public class Movegen implements Serializable {
 
 	public List<GameState> get_parents(long a, byte w, byte b, byte wf, byte bf){
 		a = board_negate(a);
+
+		Adj adj = adjs[w][b][wf][bf];
 
 		byte tmp=w; w=b; b=tmp; //swap(w,b);
 		tmp=wf; wf=bf; bf=tmp; //swap(wf,bf);
@@ -190,8 +192,6 @@ public class Movegen implements Serializable {
 
 		////int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
 		int[] adjmasks = slide_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
-
-		Adj adj = adjs[w][b][wf][bf];
 
 		final boolean P_MOZG_COND = wf==0;
 //		#if VARIANT==STANDARD || VARIANT==MORABARABA
@@ -333,7 +333,7 @@ public class Movegen implements Serializable {
 //}
 
 
-
+/*
 	boolean can_close_mill(long a, int w, int b, int wf, int bf){
 		if((a&(mask24<<24)) == 0) return false; //ha nincs az ellenfelnek korongja
 		//Valojaban erre nem lenne szukseg, ld. doc-ban "Nincs korong f�nt probl�m�k" szekcio
@@ -386,7 +386,7 @@ public class Movegen implements Serializable {
 	public boolean can_close_mill(GameState a){
 		return can_close_mill(a.board, a.sid);
 	}
-
+*/
 
 
 
