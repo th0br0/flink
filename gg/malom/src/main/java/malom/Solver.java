@@ -11,8 +11,11 @@ import org.apache.flink.graph.Vertex;
 import org.apache.flink.types.NullValue;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 public class Solver {
@@ -23,7 +26,7 @@ public class Solver {
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(1);
+		env.setParallelism(4);
 
 
 		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
@@ -39,20 +42,33 @@ public class Solver {
 		//res.getVertices().print();
 		//System.out.println(res.getVertices().count());
 
-
+/*
 		res.getVertices().writeAsText("/home/gabor/tmp/res.txt", FileSystem.WriteMode.OVERWRITE);
 		env.execute();
+*/
 
+		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
+		Map<Long, ValueCount> resMap = new TreeMap<>();
+		for(Vertex<GameState, ValueCount> v: resList) {
+			resMap.put(v.getId().board, v.getValue());
+		}
+		Map<Long, Integer> v32 = new HashMap<>();
+		for(Vertex<GameState, ValueCount> v: resList) {
+			if(resMap.get(Symmetries.minSym48(v.getId().board)).value != v.getValue().value) {
+				int a = 42;
+			}
 
-//		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
-//		Map<Long, ValueCount> resMap = new TreeMap<>();
-//		for(Vertex<GameState, ValueCount> v: resList) {
-//			resMap.put(v.getId().board, v.getValue());
-//		}
-//		for(Vertex<GameState, ValueCount> v: resList) {
-//			if(resMap.get(Symmetries.minSym48(v.getId().board)).value != v.getValue().value) {
-//				int a = 42;
-//			}
-//		}
+			if(v.getValue().value == 32) {
+				Long x = Symmetries.minSym48(v.getId().board);
+				if(!v32.containsKey(x)) {
+					v32.put(x, 1);
+				} else {
+					v32.put(x, v32.get(x) + 1);
+				}
+			}
+		}
+		for(Object l: v32.entrySet()) {
+			System.out.println(l);
+		}
 	}
 }
