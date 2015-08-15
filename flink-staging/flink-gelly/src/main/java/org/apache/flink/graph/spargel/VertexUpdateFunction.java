@@ -87,7 +87,7 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 	 * 
 	 * @throws Exception The computation may throw exceptions, which causes the superstep to fail.
 	 */
-	protected abstract void updateVertex(Vertex<K, VV> vertex, MessageIterator<Message> inMessages) throws Exception;
+	public abstract void updateVertex(Vertex<K, VV> vertex, MessageIterator<Message> inMessages) throws Exception;
 	
 	/**
 	 * This method is executed one per superstep before the vertex update function is invoked for each vertex.
@@ -117,8 +117,10 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 		setNewVertexValueCalled = true;
 		if(isOptDegrees()) {
 			outValWithDegrees.f1.f0 = newValue;
+			outWithDegrees.collect(outValWithDegrees);
 		} else {
 			outVal.setValue(newValue);
+			out.collect(outVal);
 		}
 	}
 	
@@ -178,8 +180,6 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 
 	private Vertex<K, Tuple3<VV, Long, Long>> outValWithDegrees;
 
-	private boolean setNewVertexValueCalled;
-
 	private long inDegree = -1;
 
 	private long outDegree = -1;
@@ -193,7 +193,6 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 	void setOutput(Vertex<K, VV> outVal, Collector<Vertex<K, VV>> out) {
 		this.outVal = outVal;
 		this.out = out;
-		setNewVertexValueCalled = false;
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -201,7 +200,6 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 			Collector out) {
 		this.outValWithDegrees = (Vertex<K, Tuple3<VV, Long, Long>>) outVal;
 		this.outWithDegrees = out;
-		setNewVertexValueCalled = false;
 	}
 
 	/**
@@ -248,28 +246,6 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 		Vertex<K, VV> vertex = new Vertex<K, VV>(vertexState.f0,
 				((Tuple3<VV, Long, Long>)vertexState.getValue()).f0);
 
-		updateVertexWrapper(vertex, inMessages);
-	}
-
-	/**
-	 * setNewVertexValue shouldn't call the collect methods, because it might be called more than once from
-	 * updateVertex, in which case the vertex would end up multiple times in the workset. (That would be a problem
-	 * because MessagingUdfWithEVsSimpleVV.coGroup would handle only one of them.)
-	 *
-	 * So here we call collect only for the last value set.
-	 *
-	 * @param vertex
-	 * @param inMessages
-	 * @throws Exception
-	 */
-	void updateVertexWrapper(Vertex<K, VV> vertex, MessageIterator<Message> inMessages) throws Exception {
 		updateVertex(vertex, inMessages);
-		if(setNewVertexValueCalled) {
-			if (isOptDegrees()) {
-				outWithDegrees.collect(outValWithDegrees);
-			} else {
-				out.collect(outVal);
-			}
-		}
 	}
 }
