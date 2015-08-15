@@ -287,7 +287,7 @@ public class VertexCentricIteration<K, VV, Message, EV>
 				messageIter.setSource(downcastIter);
 
 				vertexUpdateFunction.setOutput(vertexState, out);
-				vertexUpdateFunction.updateVertex(vertexState, messageIter);
+				vertexUpdateFunction.updateVertexWrapper(vertexState, messageIter);
 			}
 			else {
 				final Iterator<Tuple2<K, Message>> messageIter = messages.iterator();
