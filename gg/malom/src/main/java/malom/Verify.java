@@ -3,7 +3,6 @@ package malom;
 
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
@@ -13,8 +12,6 @@ import org.apache.flink.graph.NeighborsFunctionWithVertexValue;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
-
-import java.util.ArrayList;
 
 // Verifies the result of a Retrograde run.
 // Warning: If the graph is wrong (eg. induced sectors are not present), it might not catch it.
@@ -31,8 +28,8 @@ public class Verify {
 				ValueCount vv = vertex.getValue();
 
 				if(vertex.getId().sid.isLosing()) {
-					if(!vv.isValue() || vv.value != 0) {
-						out.collect(Tuple4.of(vertex.getId(), ValueCount.value(0), vv, GameState.getNull()));
+					if(!vv.isValue() || !vv.value.equals(Value.loss(0))) {
+						out.collect(Tuple4.of(vertex.getId(), ValueCount.value(Value.loss(0)), vv, GameState.getNull()));
 					}
 				}
 
@@ -48,16 +45,16 @@ public class Verify {
 					if(cvc.isCount()) { // child is draw
 						hasDraw = true;
 						drawMh = cid;
-					} else if(cvc.isValue() && cvc.value % 2 == 0) { // child is loss
+					} else if(cvc.isValue() && cvc.value.isLoss()) { // child is loss
 						hasWin = true;
-						if(cvc.value + 1 < bestWin) {
-							bestWin = (short)(cvc.value + 1);
+						if(cvc.value.depth + 1 < bestWin) {
+							bestWin = (short)(cvc.value.depth + 1);
 							winMh = cid;
 						}
-					} else if(cvc.isValue() && cvc.value % 2 == 1) { // child is win
+					} else if(cvc.isValue() && cvc.value.isWin()) { // child is win
 						hasLoss = true;
-						if(cvc.value + 1 > bestLoss) {
-							bestLoss = (short)(cvc.value + 1);
+						if(cvc.value.depth + 1 > bestLoss) {
+							bestLoss = (short)(cvc.value.depth + 1);
 							lossMh = cid;
 						}
 						numWinChd++;
@@ -69,16 +66,16 @@ public class Verify {
 				ValueCount shouldBe = null;
 				GameState mh = null;
 				if(blocked) {
-					shouldBe = ValueCount.value(0);
+					shouldBe = ValueCount.value(Value.loss(0));
 				} else {
 					if(hasWin) {
-						shouldBe = ValueCount.value(bestWin);
+						shouldBe = ValueCount.value(Value.win(bestWin));
 						mh = winMh;
 					} else if(hasDraw) {
 						shouldBe = ValueCount.count(numChd - numWinChd);
 						mh = drawMh;
 					} else if(hasLoss) {
-						shouldBe = ValueCount.value(bestLoss);
+						shouldBe = ValueCount.value(Value.loss(bestLoss));
 						mh = lossMh;
 					} else {
 						assert false;
