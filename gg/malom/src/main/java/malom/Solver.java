@@ -23,7 +23,7 @@ public class Solver {
 	public static void main(String[] args) throws Exception {
 
 		System.out.println("VIGYAZAT! adjmasks atirva! (de csak felig, a can_close_mill-ben nem)");
-		System.out.println("VIGYAZAT! lose condition atirva!");
+		//System.out.println("VIGYAZAT! lose condition atirva!");
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -33,8 +33,12 @@ public class Solver {
 		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
 		//sectors.add(new SectorId(3, 3, 0, 0));
 		//sectors.add(new SectorId(1, 1, 0, 0));
-		sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
-		sectors.add(new SectorId(1, 3, 0, 0)); //sectors.add(new SectorId(3, 1, 0, 0));
+//		sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
+//		sectors.add(new SectorId(1, 3, 0, 0)); //sectors.add(new SectorId(3, 1, 0, 0));
+
+		sectors.add(new SectorId(3, 3, 0, 0));
+		sectors.add(new SectorId(2, 3, 0, 0));
+		//sectors.add(new SectorId(3, 4, 0, 0)); sectors.add(new SectorId(4, 3, 0, 0));
 
 		//-Xmx6g -Xms6g
 
@@ -45,7 +49,7 @@ public class Solver {
 
 		Verify.verify(res);
 
-		res.getVertices().writeAsText("/home/gabor/tmp/res.txt", FileSystem.WriteMode.OVERWRITE);
+		res.getVertices().writeAsText("/home/gabor/malom_output/res.txt", FileSystem.WriteMode.OVERWRITE);
 		env.execute();
 
 
