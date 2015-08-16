@@ -193,6 +193,7 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 	void setOutput(Vertex<K, VV> outVal, Collector<Vertex<K, VV>> out) {
 		this.outVal = outVal;
 		this.out = out;
+		setNewVertexValueCalled = false;
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -200,6 +201,7 @@ public abstract class VertexUpdateFunction<K, VV, Message> implements Serializab
 			Collector out) {
 		this.outValWithDegrees = (Vertex<K, Tuple3<VV, Long, Long>>) outVal;
 		this.outWithDegrees = out;
+		setNewVertexValueCalled = false;
 	}
 
 	/**

@@ -68,7 +68,7 @@ public class LabelPropagationAlgorithm<K extends Comparable<K> & Serializable>
 	public static final class UpdateVertexLabel<K> extends VertexUpdateFunction<K, Long, Long> {
 
 		public void updateVertex(Vertex<K, Long> vertex,
-				MessageIterator<Long> inMessages) {
+				MessageIterator<Long> inMessages) throws Exception {
 			Map<Long, Long> labelsWithFrequencies = new HashMap<Long, Long>();
 
 			long maxFrequency = 1;

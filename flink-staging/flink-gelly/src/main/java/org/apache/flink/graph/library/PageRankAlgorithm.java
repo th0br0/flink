@@ -64,7 +64,7 @@ public class PageRankAlgorithm<K extends Comparable<K> & Serializable> implement
 		}
 
 		@Override
-		public void updateVertex(Vertex<K, Double> vertex, MessageIterator<Double> inMessages) {
+		public void updateVertex(Vertex<K, Double> vertex, MessageIterator<Double> inMessages) throws Exception {
 			double rankSum = 0.0;
 			for (double msg : inMessages) {
 				rankSum += msg;

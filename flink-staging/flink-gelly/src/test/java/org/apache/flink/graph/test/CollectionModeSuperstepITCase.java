@@ -58,7 +58,7 @@ public class CollectionModeSuperstepITCase {
 	
 	public static final class UpdateFunction extends VertexUpdateFunction<Long, Long, Long> {
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			long superstep = getSuperstepNumber();
 			Assert.assertEquals(true, vertex.getValue() == superstep);
 			setNewVertexValue(vertex.getValue() + 1);
