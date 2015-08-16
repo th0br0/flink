@@ -1,12 +1,12 @@
 package malom;
 
 public class ValueCount {
-	public short value = -1;
+	public Value value = Value.getNull();
 	public short count = -1;
 
-	public static ValueCount value(int v){
+	public static ValueCount value(Value v){
 		ValueCount r = new ValueCount();
-		r.value = (short)v;
+		r.value = v;
 		return r;
 	}
 
@@ -17,7 +17,7 @@ public class ValueCount {
 	}
 
 	public boolean isValue(){
-		return value != -1;
+		return !value.isNull();
 	}
 
 	public boolean isCount(){
@@ -29,7 +29,7 @@ public class ValueCount {
 		if(o0 instanceof ValueCount) {
 			ValueCount o = (ValueCount) o0;
 			if(isValue()) {
-				return o.isValue() && value == o.value;
+				return o.isValue() && value.equals(o.value);
 			} else if(isCount()){
 				return o.isCount() && count == o.count;
 			} else {

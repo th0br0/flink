@@ -1,19 +1,13 @@
 package malom;
 
 
-import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.NeighborsFunction;
-import org.apache.flink.graph.NeighborsFunctionWithVertexValue;
-import org.apache.flink.graph.ReduceNeighborsFunction;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.spargel.MessageIterator;
@@ -101,10 +95,10 @@ public class Retrograde implements Serializable {
 				long deg = deg0.f1;
 				GameState v = v0.f0;
 				if (v.sid.isLosing()) {
-					return new Vertex<>(v, ValueCount.value(0));
+					return new Vertex<>(v, ValueCount.value(Value.loss(0)));
 				} else {
 					if (deg == 0) { // state is blocked
-						return new Vertex<>(v, ValueCount.value(0));
+						return new Vertex<>(v, ValueCount.value(Value.loss(0)));
 					} else { // to be computed by the iteration (set to count for now)
 						return new Vertex<>(v, ValueCount.count((int) deg));
 					}
@@ -119,42 +113,42 @@ public class Retrograde implements Serializable {
 		//config.setOptDegrees(true);
 		//config.setSolutionSetUnmanagedMemory(true);
 
-		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Short>() {
+		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Value>() {
 			@Override
-			public void updateVertex(Vertex<GameState, ValueCount> vertex, MessageIterator<Short> inMessages) throws Exception {
+			public void updateVertex(Vertex<GameState, ValueCount> vertex, MessageIterator<Value> inMessages) throws Exception {
 				boolean newValueSet = false;
 				ValueCount vv = vertex.getValue();
-				for (Short msg : inMessages) {
-					assert getSuperstepNumber() == msg + 1;
+				for (Value msg : inMessages) {
+					assert getSuperstepNumber() == msg.depth + 1;
 					if (vv.isCount()) { //count-ba terjesztunk
-						if (msg % 2 == 1) { //nyeresbol terjesztunk
+						if (msg.isWin()) { //nyeresbol terjesztunk
 							short newCount = (short) (vv.count - 1);
 							if (newCount == 0) { //elfogyott a count
-								vv = ValueCount.value(msg + 1);
+								vv = ValueCount.value(msg.undoNegate());
 								newValueSet = true;
 							} else { //nem fogyott el a count
 								vv = ValueCount.count(newCount);
 								newValueSet = true;
 							}
 						} else { //vesztesbol terjesztunk
-							vv = ValueCount.value(msg + 1);
+							vv = ValueCount.value(msg.undoNegate());
 							newValueSet = true;
 						}
 					} else { //val-ba terjesztunk
-						assert vv.value % 2 == 1;
-						assert vv.value <= msg + 1; // (az ultra-nal itt meg valami magic van, ld. a c++ kodban)
+						assert vv.value.isWin();
+						assert vv.value.depth <= msg.depth + 1; // (az ultra-nal itt meg valami magic van, ld. a c++ kodban)
 					}
 				}
 				if(newValueSet) {
 					setNewVertexValue(vv);
 				}
 			}
-		}, new MessagingFunction<GameState, ValueCount, Short, NullValue>() {
+		}, new MessagingFunction<GameState, ValueCount, Value, NullValue>() {
 			@Override
 			public void sendMessages(Vertex<GameState, ValueCount> vertex) throws Exception {
 				if (vertex.getValue().isValue()) {
 					sendMessageToAllNeighbors(vertex.getValue().value);
-					assert vertex.getValue().value + 1 == getSuperstepNumber();
+					assert vertex.getValue().value.depth + 1 == getSuperstepNumber();
 				}
 			}
 		}, 1000, config);
