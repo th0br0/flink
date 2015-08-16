@@ -122,46 +122,39 @@ public class Retrograde implements Serializable {
 		return g.runVertexCentricIteration(new VertexUpdateFunction<GameState, ValueCount, Short>() {
 			@Override
 			public void updateVertex(Vertex<GameState, ValueCount> vertex, MessageIterator<Short> inMessages) throws Exception {
-
-				///
-				if(vertex.getId().board == 1476395011L) {
-					int a = 42;
-				}
-				///
-
+				boolean newValueSet = false;
+				ValueCount vv = vertex.getValue();
 				for (Short msg : inMessages) {
 					assert getSuperstepNumber() == msg + 1;
-					if (vertex.getValue().isCount()) { //count-ba terjesztunk
+					if (vv.isCount()) { //count-ba terjesztunk
 						if (msg % 2 == 1) { //nyeresbol terjesztunk
-							short newCount = (short) (vertex.getValue().count - 1);
+							short newCount = (short) (vv.count - 1);
 							if (newCount == 0) { //elfogyott a count
-								setNewVertexValue(ValueCount.value(msg + 1));
+								vv = ValueCount.value(msg + 1);
+								newValueSet = true;
 							} else { //nem fogyott el a count
-								setNewVertexValue(ValueCount.count(newCount));
+								vv = ValueCount.count(newCount);
+								newValueSet = true;
 							}
 						} else { //vesztesbol terjesztunk
-							setNewVertexValue(ValueCount.value(msg + 1));
+							vv = ValueCount.value(msg + 1);
+							newValueSet = true;
 						}
 					} else { //val-ba terjesztunk
-						assert vertex.getValue().value % 2 == 1;
-						assert vertex.getValue().value <= msg + 1; // (az ultra-nal itt meg valami magic van, ld. a c++ kodban)
+						assert vv.value % 2 == 1;
+						assert vv.value <= msg + 1; // (az ultra-nal itt meg valami magic van, ld. a c++ kodban)
 					}
+				}
+				if(newValueSet) {
+					setNewVertexValue(vv);
 				}
 			}
 		}, new MessagingFunction<GameState, ValueCount, Short, NullValue>() {
 			@Override
 			public void sendMessages(Vertex<GameState, ValueCount> vertex) throws Exception {
-
-				///!!!!! Ugy tunik, hogy az a gond, hogy ha tobbszor van setNewVertexValue hivva, akkor csak az elsonek az eredmenyet adja at a Gelly!!!!!!
-
-				///
-				if(vertex.getId().board == 1476395011L) {
-					int a = 42;
-				}
-				///
-
 				if (vertex.getValue().isValue()) {
 					sendMessageToAllNeighbors(vertex.getValue().value);
+					assert vertex.getValue().value + 1 == getSuperstepNumber();
 				}
 			}
 		}, 1000, config);
