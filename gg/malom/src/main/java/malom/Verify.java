@@ -20,17 +20,15 @@ import java.util.ArrayList;
 // Warning: If the graph is wrong (eg. induced sectors are not present), it might not catch it.
 public class Verify {
 	static public void verify(Graph<GameState, ValueCount, NullValue> g) {
-		DataSet<Tuple4<GameState, ValueCount, ValueCount, GameState>> verif = g.groupReduceOnNeighbors(new NeighborsFunctionWithVertexValue<GameState, ValueCount, NullValue, Tuple4<GameState, ValueCount, ValueCount, GameState>>() {
+		DataSet<Tuple4<GameState, ValueCount, ValueCount, GameState>> verif = g.groupReduceOnNeighbors(
+				new NeighborsFunctionWithVertexValue<GameState, ValueCount, NullValue, Tuple4<GameState, ValueCount, ValueCount, GameState>>() {
 			@Override
-			public void iterateNeighbors(Vertex<GameState, ValueCount> vertex, Iterable<Tuple2<Edge<GameState, NullValue>, Vertex<GameState, ValueCount>>> neighbors, Collector<Tuple4<GameState, ValueCount, ValueCount, GameState>> out) throws Exception {
+			public void iterateNeighbors(
+					Vertex<GameState, ValueCount> vertex,
+					Iterable<Tuple2<Edge<GameState, NullValue>, Vertex<GameState, ValueCount>>> neighbors,
+					Collector<Tuple4<GameState, ValueCount, ValueCount, GameState>> out) throws Exception {
 
 				ValueCount vv = vertex.getValue();
-
-				///
-				if(vertex.getId().board == 1476395011L) {
-					int a = 42;
-				}
-				///
 
 				if(vertex.getId().sid.isLosing()) {
 					if(!vv.isValue() || vv.value != 0) {
@@ -56,13 +54,13 @@ public class Verify {
 							bestWin = (short)(cvc.value + 1);
 							winMh = cid;
 						}
-						numWinChd++;
 					} else if(cvc.isValue() && cvc.value % 2 == 1) { // child is win
 						hasLoss = true;
 						if(cvc.value + 1 > bestLoss) {
 							bestLoss = (short)(cvc.value + 1);
 							lossMh = cid;
 						}
+						numWinChd++;
 					} else {
 						assert false;
 					}
@@ -92,6 +90,6 @@ public class Verify {
 				}
 			}
 		}, EdgeDirection.IN);
-		verif.writeAsText("/home/gabor/tmp/verif.txt", FileSystem.WriteMode.OVERWRITE);
+		verif.writeAsText("/home/gabor/malom_output/verif.txt", FileSystem.WriteMode.OVERWRITE);
 	}
 }

@@ -31,7 +31,7 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 	}
 
 	public boolean isLosing() {
-		return w + wf < 2; /////////////////////// 3
+		return w + wf < 3; /////////////////////// 3
 	}
 
 	static public SectorId getNull() {
