@@ -437,7 +437,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 		}
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			long superstep = getSuperstepNumber();
 			aggregator.aggregate(superstep);
 
@@ -451,7 +451,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 		LongSumAggregator aggregator = new LongSumAggregator();
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 
 			// test number of vertices
 			Assert.assertEquals(-1, getNumberOfVertices());
@@ -514,7 +514,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 	public static final class UpdateFunctionNumVertices extends VertexUpdateFunction<Long, Long, Long> {
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 				setNewVertexValue(getNumberOfVertices());
 		}
 	}
@@ -523,7 +523,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 	public static final class DummyUpdateFunction extends VertexUpdateFunction<Long, Long, Long> {
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			setNewVertexValue(vertex.getValue() + 1);
 		}
 	}
@@ -575,7 +575,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 	public static final class UpdateFunctionInDegrees extends VertexUpdateFunction<Long, Long, Long> {
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			long inDegree = getInDegree();
 			setNewVertexValue(inDegree);
 		}
@@ -585,7 +585,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 	public static final class UpdateFunctionOutDegrees extends VertexUpdateFunction<Long, Long, Long> {
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			long outDegree = getOutDegree();
 			setNewVertexValue(outDegree);
 		}
@@ -611,7 +611,7 @@ public class VertexCentricConfigurationITCase extends MultipleProgramsTestBase {
 	public static final class UpdateFunctionDegrees extends VertexUpdateFunction<Long, Long, Long> {
 
 		@Override
-		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) {
+		public void updateVertex(Vertex<Long, Long> vertex, MessageIterator<Long> inMessages) throws Exception {
 			long inDegree = getInDegree();
 			long outDegree = getOutDegree();
 			setNewVertexValue(inDegree + outDegree);
