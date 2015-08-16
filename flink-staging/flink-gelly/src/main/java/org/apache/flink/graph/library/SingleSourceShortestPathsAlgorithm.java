@@ -76,7 +76,7 @@ public class SingleSourceShortestPathsAlgorithm<K extends Comparable<K> & Serial
 
 		@Override
 		public void updateVertex(Vertex<K, Double> vertex,
-				MessageIterator<Double> inMessages) throws Exception {
+				MessageIterator<Double> inMessages) {
 
 			Double minDistance = Double.MAX_VALUE;
 
