@@ -1,9 +1,9 @@
 package malom;
 
 public class Config {
-	static String movegen_file = "/tmp/movegen";
+	static String movegenFile = "/tmp/movegen";
 
-	static final int max_ksz = 9;
+	static final int maxPieceCount = 9;
 	static final String variantName = "std";
 
 	static final boolean filterSym = true;
