@@ -49,7 +49,7 @@ public class Movegen implements Serializable {
 	static {
 		System.out.println("Movegen static init");
 		try {
-			if(new File(Config.movegen_file).exists()) {
+			if(new File(Config.movegenFile).exists()) {
 				read_movegen();
 			} else {
 				write_movegen();
@@ -101,7 +101,7 @@ public class Movegen implements Serializable {
 		System.out.print("Writing to file...");
 		ObjectOutputStream f = null;
 		try {
-			f = new ObjectOutputStream(new FileOutputStream(Config.movegen_file));
+			f = new ObjectOutputStream(new FileOutputStream(Config.movegenFile));
 			f.writeObject(millmasks);
 			f.writeObject(untakemasks);
 			f.writeObject(millclosemasks);
@@ -117,7 +117,7 @@ public class Movegen implements Serializable {
 		System.out.print("Reading movegen lookuptables...");
 		ObjectInputStream f = null;
 		try {
-			f = new ObjectInputStream(new FileInputStream(Config.movegen_file));
+			f = new ObjectInputStream(new FileInputStream(Config.movegenFile));
 			System.arraycopy(f.readObject(), 0, millmasks, 0, 1 << 24);
 			System.arraycopy(f.readObject(), 0, untakemasks, 0, 1 << 24);
 			System.arraycopy(f.readObject(), 0, millclosemasks, 0, 1 << 24);
@@ -138,7 +138,7 @@ public class Movegen implements Serializable {
 		public SectorId mozg, felrak, mozg_kle, felrak_kle;
 	}
 
-	Adj[][][][] adjs = new Adj[Config.max_ksz + 1][Config.max_ksz + 1][Config.max_ksz + 1][Config.max_ksz + 1];
+	Adj[][][][] adjs = new Adj[Config.maxPieceCount + 1][Config.maxPieceCount + 1][Config.maxPieceCount + 1][Config.maxPieceCount + 1];
 
 	Movegen(List<SectorId> ids0) {
 		HashSet<SectorId> ids = new HashSet<SectorId>(ids0);
@@ -187,8 +187,8 @@ public class Movegen implements Serializable {
 
 		long cp=a&mask24; //cp korongjai, kiveve ld. az alabbi sort  (a ciklus megeszi!)
 
-		if(b+bf==Config.max_ksz)
-			cp^=cpmills; //ha b+bf max_ksz fole menne, akkor nem csinalhatunk vissza malombecsukast
+		if(b+bf==Config.maxPieceCount)
+			cp^=cpmills; //ha b+bf maxPieceCount fole menne, akkor nem csinalhatunk vissza malombecsukast
 
 		int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
 		////int[] adjmasks = slide_adjmasks;
@@ -418,8 +418,8 @@ public class Movegen implements Serializable {
 //	a_id=a_id0;
 //
 //	//meg vannak cserelve az indexek
-//	felrakas = /*a_id.w<max_ksz &&*/ a_id.wf>0 ? sectors[a_id.b][a_id.w+1][a_id.bf][a_id.wf-1] : nullptr;
-//	felrakas_kle = a_id.b>0 && /*a_id.w<max_ksz &&*/ a_id.wf>0 ? sectors[a_id.b-1][a_id.w+1][a_id.bf][a_id.wf-1] : nullptr;
+//	felrakas = /*a_id.w<maxPieceCount &&*/ a_id.wf>0 ? sectors[a_id.b][a_id.w+1][a_id.bf][a_id.wf-1] : nullptr;
+//	felrakas_kle = a_id.b>0 && /*a_id.w<maxPieceCount &&*/ a_id.wf>0 ? sectors[a_id.b-1][a_id.w+1][a_id.bf][a_id.wf-1] : nullptr;
 //	mozg = sectors[a_id.b][a_id.w][a_id.bf][a_id.wf];
 //	mozg_kle = a_id.b>0 ? sectors[a_id.b-1][a_id.w][a_id.bf][a_id.wf] : nullptr;
 //}

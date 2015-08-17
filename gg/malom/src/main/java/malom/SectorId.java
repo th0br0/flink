@@ -18,16 +18,29 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		this((byte)w, (byte)b, (byte) wf, (byte) bf);
 	}
 
+	public SectorId(SectorId o) {
+		this.w = o.w;
+		this.b = o.b;
+		this.wf = o.wf;
+		this.bf = o.bf;
+	}
+
 	public SectorId(){}
 
-	public void negate(){
+	public void negateInPlace(){
 		byte tmp = w;
 		w = b;
-		b =tmp;
+		b = tmp;
 
-		tmp= wf;
+		tmp = wf;
 		wf = bf;
-		bf = wf;
+		bf = tmp;
+	}
+
+	public SectorId negate(){
+		SectorId r = new SectorId(this);
+		r.negateInPlace();
+		return r;
 	}
 
 	public boolean isLosing() {
@@ -38,22 +51,21 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		return new SectorId(-1, -1, -1, -1);
 	}
 
-//	boolean eks() {
-//		return *this==-*this;
-//	}
+	public boolean isEsc() {
+		return equals(negate());
+	}
 
+	public boolean isTransient() {
+		//#if VARIANT==STANDARD || VARIANT==MORABARABA
+		return !(wf==0 && bf==0);
+		//#else
+		//return !(w!=0 && b!=0);
+		//#endif
+	}
 
-//	boolean transient() const {
-//		#if VARIANT==STANDARD || VARIANT==MORABARABA
-//		return !(wf==0 && bf==0);
-//		#else
-//		return !(w!=0 && b!=0);
-//		#endif
-//	}
-
-//	bool twine() const {
-//		return !eks() && !transient();
-//	}
+	public boolean isTwin() {
+		return !isEsc() && !isTransient();
+	}
 
 //	string file_name(){
 //		char b[255];
