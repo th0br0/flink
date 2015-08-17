@@ -1,6 +1,10 @@
 package malom;
 
-public class Value {
+import java.io.Serializable;
+
+public class Value implements Serializable {
+	private static final long serialVersionUID = 1L;
+
 	public byte value;
 	public short depth;
 

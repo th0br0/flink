@@ -27,29 +27,35 @@ public class Solver {
 
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(4);
+		env.setParallelism(1);
 
 
-		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
-		//sectors.add(new SectorId(3, 3, 0, 0));
-		//sectors.add(new SectorId(1, 1, 0, 0));
-//		sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
-//		sectors.add(new SectorId(1, 3, 0, 0)); //sectors.add(new SectorId(3, 1, 0, 0));
+//		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
+//		//sectors.add(new SectorId(3, 3, 0, 0));
+//		//sectors.add(new SectorId(1, 1, 0, 0));
+////		sectors.add(new SectorId(2, 3, 0, 0)); sectors.add(new SectorId(3, 2, 0, 0));
+////		sectors.add(new SectorId(1, 3, 0, 0)); //sectors.add(new SectorId(3, 1, 0, 0));
+//
+//		sectors.add(new SectorId(3, 3, 0, 0));
+//		sectors.add(new SectorId(2, 3, 0, 0));
+//		//sectors.add(new SectorId(3, 4, 0, 0)); sectors.add(new SectorId(4, 3, 0, 0));
+//
+//		//-Xmx6g -Xms6g
+//
+//		Retrograde retr = new Retrograde(sectors, env);
+//		Graph<GameState, ValueCount, NullValue> res = retr.run();
+//		//res.getVertices().print();
+//		//System.out.println(res.getVertices().count());
+//
+//		Verify.verify(res);
+//
+//		res.getVertices().writeAsText("/home/gabor/malom_output/res.txt", FileSystem.WriteMode.OVERWRITE);
+//		env.execute();
 
-		sectors.add(new SectorId(3, 3, 0, 0));
-		sectors.add(new SectorId(2, 3, 0, 0));
-		//sectors.add(new SectorId(3, 4, 0, 0)); sectors.add(new SectorId(4, 3, 0, 0));
 
-		//-Xmx6g -Xms6g
-
-		Retrograde retr = new Retrograde(sectors, env);
-		Graph<GameState, ValueCount, NullValue> res = retr.run();
-		//res.getVertices().print();
-		//System.out.println(res.getVertices().count());
-
-		Verify.verify(res);
-
-		res.getVertices().writeAsText("/home/gabor/malom_output/res.txt", FileSystem.WriteMode.OVERWRITE);
+		SectorGraph sectorGraph = new SectorGraph(env);
+		DataSet<Vertex<GameState, ValueCount>> res = sectorGraph.solve(new SectorId(3,3,0,0));
+		res.writeAsText("/home/gabor/malom_output/res2", FileSystem.WriteMode.OVERWRITE);
 		env.execute();
 
 
