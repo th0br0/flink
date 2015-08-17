@@ -1,6 +1,10 @@
 package malom;
 
-public class ValueCount {
+import java.io.Serializable;
+
+public class ValueCount implements Serializable {
+	private static final long serialVersionUID = 1L;
+
 	public Value value = Value.getNull();
 	public short count = -1;
 
