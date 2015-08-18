@@ -18,12 +18,15 @@
 
 package org.apache.flink.graph.spargel;
 
+import java.io.Serializable;
 import java.util.Iterator;
 import java.util.Map;
 
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.functions.FlatJoinFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.RichGroupReduceFunction;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.operators.DeltaIteration;
@@ -31,6 +34,7 @@ import org.apache.flink.api.common.functions.RichCoGroupFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.operators.CoGroupOperator;
 import org.apache.flink.api.java.operators.CustomUnaryOperation;
+import org.apache.flink.api.java.operators.GroupReduceOperator;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
@@ -348,48 +352,93 @@ public class VertexCentricIteration<K, VV, Message, EV>
 		}
 	}
 
-	/*
+
+	/**
 	 * UDF that encapsulates the message sending function for graphs where the edges have an associated value.
 	 */
 	private static abstract class MessagingUdfWithEdgeValues<K, VVWithDegrees, VV, Message, EV>
-		extends RichCoGroupFunction<Edge<K, EV>, Vertex<K, VVWithDegrees>, Tuple2<K, Message>>
+		extends RichGroupReduceFunction<Tuple2<Edge<K, EV>, Vertex<K, VVWithDegrees>>, Tuple2<K, Message>>
 		implements ResultTypeQueryable<Tuple2<K, Message>>
 	{
 		private static final long serialVersionUID = 1L;
-		
+
 		final MessagingFunction<K, VV, Message, EV> messagingFunction;
-		
+
 		private transient TypeInformation<Tuple2<K, Message>> resultType;
-	
-	
+
+
 		private MessagingUdfWithEdgeValues(MessagingFunction<K, VV, Message, EV> messagingFunction,
 				TypeInformation<Tuple2<K, Message>> resultType)
 		{
 			this.messagingFunction = messagingFunction;
 			this.resultType = resultType;
 		}
-		
+
 		@Override
 		public void open(Configuration parameters) throws Exception {
 			if (getIterationRuntimeContext().getSuperstepNumber() == 1) {
 				this.messagingFunction.init(getIterationRuntimeContext());
 			}
-			
+
 			this.messagingFunction.preSuperstep();
 		}
-		
+
 		@Override
 		public void close() throws Exception {
 			this.messagingFunction.postSuperstep();
 		}
-		
+
 		@Override
 		public TypeInformation<Tuple2<K, Message>> getProducedType() {
 			return this.resultType;
 		}
+
+		/**
+		 * messagingFunction.sendMessages needs an Iterator over the edges, but we have an
+		 * Iterable<Tuple2<Vertex<K, VVWithDegrees>, Edge<K, EV>>> instead, so we need this iterator adaptor.
+		 * Moreover, the reduce method doesn't get the key (the vertex state). It can only obtain it from the
+		 * group Iterable. Therefore the this class looks ahead one element, so that it can tell the
+		 * vertex state immediately at the start (peekVertex).
+		 */
+		class NeighborsIteratorAdaptor implements Iterator<Edge<K, EV>>, Serializable {
+
+			private static final long serialVersionUID = 1L;
+
+			Iterator<Tuple2<Edge<K, EV>, Vertex<K, VVWithDegrees>>> baseIterator;
+			Tuple2<Edge<K, EV>, Vertex<K, VVWithDegrees>> next;
+
+			NeighborsIteratorAdaptor(Iterable<Tuple2<Edge<K, EV>, Vertex<K, VVWithDegrees>>> baseIterable) {
+				baseIterator = baseIterable.iterator();
+				next = baseIterator.next(); // (the group always contains at least one element)
+			}
+
+			public Vertex<K, VVWithDegrees> peekVertex() {
+				return next.f1;
+			}
+
+			@Override
+			public boolean hasNext() {
+				return next != null;
+			}
+
+			@Override
+			public Edge<K, EV> next() {
+				Edge<K, EV> ret = next.f0;
+				if(baseIterator.hasNext()) {
+					next = baseIterator.next();
+				} else {
+					next = null;
+				}
+				return ret;
+			}
+
+			@Override
+			public void remove() {
+				throw new UnsupportedOperationException();
+			}
+		}
 	}
 
-	@SuppressWarnings("serial")
 	private static final class MessagingUdfWithEVsSimpleVV<K, VV, Message, EV>
 		extends MessagingUdfWithEdgeValues<K, VV, VV, Message, EV> {
 
@@ -399,20 +448,13 @@ public class VertexCentricIteration<K, VV, Message, EV>
 		}
 
 		@Override
-		public void coGroup(Iterable<Edge<K, EV>> edges,
-							Iterable<Vertex<K, VV>> state,
-							Collector<Tuple2<K, Message>> out) throws Exception {
-			final Iterator<Vertex<K, VV>> stateIter = state.iterator();
-		
-			if (stateIter.hasNext()) {
-				Vertex<K, VV> newVertexState = stateIter.next();
-				messagingFunction.set((Iterator<?>) edges.iterator(), out);
-				messagingFunction.sendMessages(newVertexState);
-			}
+		public void reduce(Iterable<Tuple2<Edge<K, EV>, Vertex<K, VV>>> group, Collector<Tuple2<K, Message>> out) throws Exception {
+			NeighborsIteratorAdaptor edgesIterator = new NeighborsIteratorAdaptor(group);
+			messagingFunction.set(edgesIterator, out);
+			messagingFunction.sendMessages(edgesIterator.peekVertex());
 		}
 	}
 
-	@SuppressWarnings("serial")
 	private static final class MessagingUdfWithEVsVVWithDegrees<K, VV, Message, EV>
 		extends MessagingUdfWithEdgeValues<K, Tuple3<VV, Long, Long>, VV, Message, EV> {
 
@@ -424,26 +466,22 @@ public class VertexCentricIteration<K, VV, Message, EV>
 		}
 
 		@Override
-		public void coGroup(Iterable<Edge<K, EV>> edges, Iterable<Vertex<K, Tuple3<VV, Long, Long>>> state,
-				Collector<Tuple2<K, Message>> out) throws Exception {
+		public void reduce(Iterable<Tuple2<Edge<K, EV>, Vertex<K, Tuple3<VV, Long, Long>>>> group,
+						Collector<Tuple2<K, Message>> out) throws Exception {
 
-			final Iterator<Vertex<K, Tuple3<VV, Long, Long>>> stateIter = state.iterator();
-		
-			if (stateIter.hasNext()) {
-				Vertex<K, Tuple3<VV, Long, Long>> vertexWithDegrees = stateIter.next();
+			NeighborsIteratorAdaptor edgesIterator = new NeighborsIteratorAdaptor(group);
+			Vertex<K, Tuple3<VV, Long, Long>> vertexWithDegrees = edgesIterator.peekVertex();
 
-				nextVertex.setField(vertexWithDegrees.f0, 0);
-				nextVertex.setField(vertexWithDegrees.f1.f0, 1);
+			nextVertex.setField(vertexWithDegrees.f0, 0);
+			nextVertex.setField(vertexWithDegrees.f1.f0, 1);
 
-				messagingFunction.setInDegree(vertexWithDegrees.f1.f1);
-				messagingFunction.setOutDegree(vertexWithDegrees.f1.f2);
+			messagingFunction.setInDegree(vertexWithDegrees.f1.f1);
+			messagingFunction.setOutDegree(vertexWithDegrees.f1.f2);
 
-				messagingFunction.set((Iterator<?>) edges.iterator(), out);
-				messagingFunction.sendMessages(nextVertex);
-			}
+			messagingFunction.set(edgesIterator, out);
+			messagingFunction.sendMessages(nextVertex);
 		}
 	}
-
 
 	// --------------------------------------------------------------------------------------------
 	//  UTIL methods
@@ -460,19 +498,16 @@ public class VertexCentricIteration<K, VV, Message, EV>
 	 * @param equalToArg the argument for the equalTo within the coGroup
 	 * @return the messaging function
 	 */
-	private CoGroupOperator<?, ?, Tuple2<K, Message>> buildMessagingFunction(
+	private DataSet<Tuple2<K, Message>> buildMessagingFunction(
 			DeltaIteration<Vertex<K, VV>, Vertex<K, VV>> iteration,
 			TypeInformation<Tuple2<K, Message>> messageTypeInfo, int whereArg, int equalToArg) {
 
-		// build the messaging function (co group)
-		CoGroupOperator<?, ?, Tuple2<K, Message>> messages;
-		MessagingUdfWithEdgeValues<K, VV, VV, Message, EV> messenger =
-				new MessagingUdfWithEVsSimpleVV<K, VV, Message, EV>(messagingFunction, messageTypeInfo);
+		// build the messaging function (join, then groupBy)
+		GroupReduceOperator<Tuple2<Edge<K, EV>, Vertex<K, VV>>, Tuple2<K, Message>> messages =
+				edgesWithValue.join(iteration.getWorkset(), JoinOperatorBase.JoinHint.REPARTITION_HASH_FIRST).where(whereArg).equalTo(equalToArg)
+						.groupBy("f1.f0").reduceGroup(new MessagingUdfWithEVsSimpleVV<K, VV, Message, EV>(messagingFunction, messageTypeInfo));
 
-		messages = this.edgesWithValue.coGroup(iteration.getWorkset()).where(whereArg)
-				.equalTo(equalToArg).with(messenger);
-
-		// configure coGroup message function with name and broadcast variables
+		// configure message function with name and broadcast variables
 		messages = messages.name("Messaging");
 		if(this.configuration != null) {
 			for (Tuple2<String, DataSet<?>> e : this.configuration.getMessagingBcastVars()) {
@@ -494,21 +529,17 @@ public class VertexCentricIteration<K, VV, Message, EV>
 	 * @param equalToArg the argument for the equalTo within the coGroup
 	 * @return the messaging function
 	 */
-	private CoGroupOperator<?, ?, Tuple2<K, Message>> buildMessagingFunctionVerticesWithDegrees(
+	private DataSet<Tuple2<K, Message>> buildMessagingFunctionVerticesWithDegrees(
 			DeltaIteration<Vertex<K, Tuple3<VV, Long, Long>>, Vertex<K, Tuple3<VV, Long, Long>>> iteration,
 			TypeInformation<Tuple2<K, Message>> messageTypeInfo, int whereArg, int equalToArg) {
 
-		// build the messaging function (co group)
-		CoGroupOperator<?, ?, Tuple2<K, Message>> messages;
-		MessagingUdfWithEdgeValues<K, Tuple3<VV, Long, Long>, VV, Message, EV> messenger =
-				new MessagingUdfWithEVsVVWithDegrees<K, VV, Message, EV>(messagingFunction, messageTypeInfo);
+		// build the messaging function (join, then groupBy)
+		GroupReduceOperator<Tuple2<Edge<K, EV>, Vertex<K, Tuple3<VV, Long, Long>>>, Tuple2<K, Message>> messages =
+				edgesWithValue.join(iteration.getWorkset(), JoinOperatorBase.JoinHint.REPARTITION_HASH_FIRST).where(whereArg).equalTo(equalToArg)
+						.groupBy("f1.f0").reduceGroup(new MessagingUdfWithEVsVVWithDegrees<K, VV, Message, EV>(messagingFunction, messageTypeInfo));
 
-		messages = this.edgesWithValue.coGroup(iteration.getWorkset()).where(whereArg)
-				.equalTo(equalToArg).with(messenger);
-
-		// configure coGroup message function with name and broadcast variables
+		// configure message function with name and broadcast variables
 		messages = messages.name("Messaging");
-
 		if (this.configuration != null) {
 			for (Tuple2<String, DataSet<?>> e : this.configuration.getMessagingBcastVars()) {
 				messages = messages.withBroadcastSet(e.f1, e.f0);
