@@ -55,7 +55,11 @@ public class Solver {
 
 		SectorGraph sectorGraph = new SectorGraph(env);
 		DataSet<Vertex<GameState, ValueCount>> res = sectorGraph.solve(new SectorId(3,3,0,0));
-		res.writeAsText("/home/gabor/malom_output/res2", FileSystem.WriteMode.OVERWRITE);
+
+		//Verify.verify(res, args[1]);
+
+		res.writeAsText(args[0], FileSystem.WriteMode.OVERWRITE);
+
 		env.execute();
 
 		//System.out.println(env.getExecutionPlan());
