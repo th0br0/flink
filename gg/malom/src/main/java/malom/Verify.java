@@ -16,7 +16,7 @@ import org.apache.flink.util.Collector;
 // Verifies the result of a Retrograde run.
 // Warning: If the graph is wrong (eg. induced sectors are not present), it might not catch it.
 public class Verify {
-	static public void verify(Graph<GameState, ValueCount, NullValue> g) {
+	static public void verify(Graph<GameState, ValueCount, NullValue> g, String verifOutPath) {
 		DataSet<Tuple4<GameState, ValueCount, ValueCount, GameState>> verif = g.groupReduceOnNeighbors(
 				new NeighborsFunctionWithVertexValue<GameState, ValueCount, NullValue, Tuple4<GameState, ValueCount, ValueCount, GameState>>() {
 			@Override
@@ -87,6 +87,6 @@ public class Verify {
 				}
 			}
 		}, EdgeDirection.IN);
-		verif.writeAsText("/home/gabor/malom_output/verif.txt", FileSystem.WriteMode.OVERWRITE);
+		verif.writeAsText(verifOutPath, FileSystem.WriteMode.OVERWRITE);
 	}
 }
