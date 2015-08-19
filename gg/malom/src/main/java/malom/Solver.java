@@ -58,6 +58,8 @@ public class Solver {
 		res.writeAsText("/home/gabor/malom_output/res2", FileSystem.WriteMode.OVERWRITE);
 		env.execute();
 
+		//System.out.println(env.getExecutionPlan());
+
 
 //		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
 //		Map<Long, ValueCount> resMap = new TreeMap<>();
