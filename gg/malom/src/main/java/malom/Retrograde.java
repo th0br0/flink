@@ -37,7 +37,7 @@ public class Retrograde implements Serializable {
 			public Vertex<GameState, ValueCount> map(GameState s) throws Exception {
 				return new Vertex<>(s, vv);
 			}
-		});
+		}).name("Vertices " + s);
 	}
 
 	public static DataSet<Edge<GameState, NullValue>> createEdges(DataSet<Vertex<GameState, ValueCount>> vertices, List<SectorId> sectors) {
@@ -61,7 +61,7 @@ public class Retrograde implements Serializable {
 					}
 				}
 			}
-		});
+		}).name("Edges");
 	}
 
 	public static Graph<GameState, ValueCount, NullValue> countChdAndInitBlocked(
