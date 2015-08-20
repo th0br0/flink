@@ -61,7 +61,6 @@ public class Solver {
 		res.writeAsText(args[0], FileSystem.WriteMode.OVERWRITE);
 
 		env.execute();
-
 		//System.out.println(env.getExecutionPlan());
 
 
