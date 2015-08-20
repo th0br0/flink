@@ -1360,6 +1360,7 @@ public class Graph<K, VV, EV> {
 	/**
 	 * Runs a Vertex-Centric iteration on the graph.
 	 * No configuration options are provided.
+	 * The initial workset will consist of all the vertices of the graph.
 	 *
 	 * @param vertexUpdateFunction the vertex update function
 	 * @param messagingFunction the messaging function
@@ -1379,6 +1380,7 @@ public class Graph<K, VV, EV> {
 
 	/**
 	 * Runs a Vertex-Centric iteration on the graph with configuration options.
+	 * The initial workset will consist of all the vertices of the graph.
 	 * 
 	 * @param vertexUpdateFunction the vertex update function
 	 * @param messagingFunction the messaging function
@@ -1393,10 +1395,39 @@ public class Graph<K, VV, EV> {
 			MessagingFunction<K, VV, M, EV> messagingFunction,
 			int maximumNumberOfIterations, VertexCentricConfiguration parameters) {
 
+		return this.runVertexCentricIteration(vertexUpdateFunction, messagingFunction,
+				maximumNumberOfIterations, parameters, null);
+	}
+
+	/**
+	 * Runs a Vertex-Centric iteration on the graph with configuration options.
+	 * The initial workset is also specified.
+	 *
+	 * @param vertexUpdateFunction the vertex update function
+	 * @param messagingFunction the messaging function
+	 * @param maximumNumberOfIterations maximum number of iterations to perform
+	 * @param parameters the iteration configuration parameters
+	 * @param the initial workset (the messaging function is called on these in the first iteration)
+	 *
+	 * @return the updated Graph after the vertex-centric iteration has converged or
+	 * after maximumNumberOfIterations.
+	 */
+	public <M> Graph<K, VV, EV> runVertexCentricIteration(
+			VertexUpdateFunction<K, VV, M> vertexUpdateFunction,
+			MessagingFunction<K, VV, M, EV> messagingFunction,
+			int maximumNumberOfIterations, VertexCentricConfiguration parameters,
+			DataSet<Vertex<K, VV>> initialWorkset) {
+
 		VertexCentricIteration<K, VV, M, EV> iteration = VertexCentricIteration.withEdges(
 				edges, vertexUpdateFunction, messagingFunction, maximumNumberOfIterations);
 
 		iteration.configure(parameters);
+
+		if(initialWorkset != null) {
+			iteration.setInitialWorkset(initialWorkset);
+		} else {
+			iteration.setInitialWorkset(getVertices());
+		}
 
 		DataSet<Vertex<K, VV>> newVertices = this.getVertices().runOperation(iteration);
 

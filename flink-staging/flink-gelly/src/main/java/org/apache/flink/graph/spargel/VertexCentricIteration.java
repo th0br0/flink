@@ -88,6 +88,7 @@ public class VertexCentricIteration<K, VV, Message, EV>
 	private final TypeInformation<Message> messageType;
 	
 	private DataSet<Vertex<K, VV>> initialVertices;
+	private DataSet<Vertex<K, VV>> initialWorkset;
 
 	private VertexCentricConfiguration configuration;
 
@@ -131,7 +132,11 @@ public class VertexCentricIteration<K, VV, Message, EV>
 	public void setInput(DataSet<Vertex<K, VV>> inputData) {
 		this.initialVertices = inputData;
 	}
-	
+
+	public void setInitialWorkset(DataSet<Vertex<K, VV>> initialWorkset) {
+		this.initialWorkset = initialWorkset;
+	}
+
 	/**
 	 * Creates the operator that represents this vertex-centric graph computation.
 	 * 
@@ -559,7 +564,7 @@ public class VertexCentricIteration<K, VV, Message, EV>
 		TypeInformation<Vertex<K, VV>> vertexTypes = initialVertices.getType();
 
 		final DeltaIteration<Vertex<K, VV>,	Vertex<K, VV>> iteration =
-				initialVertices.iterateDelta(initialVertices, this.maximumNumberOfIterations, 0);
+				initialVertices.iterateDelta(initialWorkset, this.maximumNumberOfIterations, 0);
 				setUpIteration(iteration);
 
 		switch (messagingDirection) {
