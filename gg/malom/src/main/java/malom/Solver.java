@@ -4,6 +4,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Graph;
@@ -28,6 +29,9 @@ public class Solver {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
+
+		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
+		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 
 
 //		ArrayList<SectorId> sectors = new ArrayList<SectorId>();
