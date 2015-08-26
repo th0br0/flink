@@ -1,5 +1,10 @@
 package malom;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataOutputView;
+
+import java.io.IOException;
 import java.io.Serializable;
 
 public class ValueCount implements Serializable {
@@ -7,6 +12,12 @@ public class ValueCount implements Serializable {
 
 	public Value value = Value.getNull();
 	public short count = -1;
+
+	public ValueCount() {}
+	private ValueCount(Value value, short count) {
+		this.value = value;
+		this.count = count;
+	}
 
 	public static ValueCount value(Value v){
 		ValueCount r = new ValueCount();
@@ -51,5 +62,79 @@ public class ValueCount implements Serializable {
 				"value=" + value +
 				", count=" + count +
 				'}';
+	}
+
+	static public class ValueCountSerializer extends TypeSerializer<ValueCount> {
+		@Override
+		public boolean isImmutableType() {
+			return false;
+		}
+
+		@Override
+		public TypeSerializer<ValueCount> duplicate() {
+			return this;
+		}
+
+		@Override
+		public ValueCount createInstance() {
+			return new ValueCount();
+		}
+
+		@Override
+		public ValueCount copy(ValueCount from) {
+			return new ValueCount(new Value(from.value), from.count);
+		}
+
+		@Override
+		public ValueCount copy(ValueCount from, ValueCount reuse) {
+			reuse.value.value = from.value.value;
+			reuse.value.depth = from.value.depth;
+			reuse.count = from.count;
+			return reuse;
+		}
+
+		@Override
+		public int getLength() {
+			return 5;
+		}
+
+		@Override
+		public void serialize(ValueCount record, DataOutputView target) throws IOException {
+			target.writeByte(record.value.value);
+			target.writeShort(record.value.depth);
+			target.writeShort(record.count);
+		}
+
+		@Override
+		public ValueCount deserialize(DataInputView source) throws IOException {
+			byte valVal = source.readByte();
+			short valDepth = source.readShort();
+			short count = source.readShort();
+			return new ValueCount(new Value(valVal, valDepth), count);
+		}
+
+		@Override
+		public ValueCount deserialize(ValueCount reuse, DataInputView source) throws IOException {
+			reuse.value.value = source.readByte();
+			reuse.value.depth = source.readShort();
+			reuse.count = source.readShort();
+			return reuse;
+		}
+
+		@Override
+		public void copy(DataInputView source, DataOutputView target) throws IOException {
+			target.write(source, getLength());
+		}
+
+
+		@Override
+		public int hashCode() {
+			return 42;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return o instanceof ValueCountSerializer;
+		}
 	}
 }

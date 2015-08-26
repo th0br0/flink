@@ -190,8 +190,8 @@ public class Movegen implements Serializable {
 		if(b+bf==Config.maxPieceCount)
 			cp^=cpmills; //ha b+bf maxPieceCount fole menne, akkor nem csinalhatunk vissza malombecsukast
 
-		int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
-		////int[] adjmasks = slide_adjmasks;
+		////int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
+		int[] adjmasks = slide_adjmasks;
 
 		final boolean P_MOZG_COND = wf==0;
 //		#if VARIANT==STANDARD || VARIANT==MORABARABA
