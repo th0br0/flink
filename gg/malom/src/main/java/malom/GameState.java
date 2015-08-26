@@ -1,8 +1,32 @@
 package malom;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
+import org.apache.flink.core.io.IOReadableWritable;
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataOutputView;
+
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.io.Serializable;
 
-public class GameState implements Comparable<GameState>, Serializable {
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.UTFDataFormatException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.core.memory.MemoryUtils;
+
+public class GameState implements Comparable<GameState>, Serializable, KryoSerializable, IOReadableWritable {
 	private static final long serialVersionUID = 1L;
 
 	public SectorId sid;
@@ -57,4 +81,125 @@ public class GameState implements Comparable<GameState>, Serializable {
 			return "Nothing";
 		}
 	}
+
+	@Override
+	public int hashCode() {
+		return (int)(sid.hashCode() * board % (1<<31));
+	}
+
+	@Override
+	public void write(Kryo kryo, Output output) {
+		output.writeByte(sid.w);
+		output.writeByte(sid.b);
+		output.writeByte(sid.wf);
+		output.writeByte(sid.bf);
+		output.writeLong(board);
+	}
+
+	@Override
+	public void read(Kryo kryo, Input input) {
+		sid = new SectorId(input.readByte(), input.readByte(), input.readByte(), input.readByte());
+		board = input.readLong();
+	}
+
+	@Override
+	public void write(DataOutputView out) throws IOException {
+		out.writeByte(sid.w);
+		out.writeByte(sid.b);
+		out.writeByte(sid.wf);
+		out.writeByte(sid.bf);
+		out.writeLong(board);
+	}
+
+	@Override
+	public void read(DataInputView in) throws IOException {
+		this.sid.w = in.readByte();
+		this.sid.b = in.readByte();
+		this.sid.wf = in.readByte();
+		this.sid.bf = in.readByte();
+		this.board = in.readLong();
+	}
+
+	static public class GameStateSerializer extends TypeSerializer<GameState> {
+		@Override
+		public boolean isImmutableType() {
+			return false;
+		}
+
+		@Override
+		public TypeSerializer<GameState> duplicate() {
+			return this;
+		}
+
+		@Override
+		public GameState createInstance() {
+			return GameState.getNull();
+		}
+
+		@Override
+		public GameState copy(GameState from) {
+			return new GameState(new SectorId(from.sid.w, from.sid.b, from.sid.wf, from.sid.bf), from.board);
+		}
+
+		@Override
+		public GameState copy(GameState from, GameState reuse) {
+			reuse.sid.w = from.sid.w;
+			reuse.sid.b = from.sid.b;
+			reuse.sid.wf = from.sid.wf;
+			reuse.sid.bf = from.sid.bf;
+			reuse.board = from.board;
+			return reuse;
+		}
+
+		@Override
+		public int getLength() {
+			return 12;
+		}
+
+		@Override
+		public void serialize(GameState record, DataOutputView target) throws IOException {
+			target.writeByte(record.sid.w);
+			target.writeByte(record.sid.b);
+			target.writeByte(record.sid.wf);
+			target.writeByte(record.sid.bf);
+			target.writeLong(record.board);
+		}
+
+		@Override
+		public GameState deserialize(DataInputView source) throws IOException {
+			byte w = source.readByte();
+			byte b = source.readByte();
+			byte wf = source.readByte();
+			byte bf = source.readByte();
+			long board = source.readLong();
+			return new GameState(new SectorId(w, b, wf, bf), board);
+		}
+
+		@Override
+		public GameState deserialize(GameState reuse, DataInputView source) throws IOException {
+			reuse.sid.w = source.readByte();
+			reuse.sid.b = source.readByte();
+			reuse.sid.wf = source.readByte();
+			reuse.sid.bf = source.readByte();
+			reuse.board = source.readLong();
+			return reuse;
+		}
+
+		@Override
+		public void copy(DataInputView source, DataOutputView target) throws IOException {
+			target.write(source, getLength());
+		}
+
+
+		@Override
+		public int hashCode() {
+			return 42;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return o instanceof GameStateSerializer;
+		}
+	}
+
 }
