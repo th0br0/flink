@@ -23,7 +23,9 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +42,9 @@ import org.apache.flink.api.java.operators.Keys.ExpressionKeys;
 
 import com.google.common.base.Joiner;
 import org.apache.flink.api.java.typeutils.runtime.kryo.KryoSerializer;
+import org.apache.flink.util.InstantiationUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TypeInformation for "Java Beans"-style types. Flink refers to them as POJOs,
@@ -281,8 +286,23 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 		return -1;
 	}
 
+	///
+	static Map<Class<?>, Class<? extends TypeSerializer>> customSerializers = new HashMap<>();
+
+	public static <C, S extends TypeSerializer<C>> void registerCustomSerializer(Class<C> c, Class<S> s) {
+		customSerializers.put(c, s);
+	}
+	///
+
 	@Override
 	public TypeSerializer<T> createSerializer(ExecutionConfig config) {
+
+		///
+		if(customSerializers.containsKey(this.typeClass)) {
+			return InstantiationUtil.instantiate(customSerializers.get(this.typeClass));
+		}
+		///
+
 		if(config.isForceKryoEnabled()) {
 			return new KryoSerializer<T>(getTypeClass(), config);
 		}
