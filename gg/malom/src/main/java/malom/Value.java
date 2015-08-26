@@ -15,6 +15,11 @@ public class Value implements Serializable {
 		this.depth = (short)depth;
 	}
 
+	public Value(Value o) {
+		this.value = o.value;
+		this.depth = o.depth;
+	}
+
 	static public byte LOSS = -1, DRAW = 0, WIN = 1;
 
 	public boolean isWin() {
