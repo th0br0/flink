@@ -28,7 +28,7 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 	public GameState next() {
 		GameState ret = new GameState(s, uncollapse(w, bc));
 
-		// If too much time is spent here, then this can be sped up by not itreating on filtered out states
+		// If too much time is spent here, then this can be sped up by not iterating on filtered out states
 		// (this would need the Gasser inv_hash)
 		w = nextChoose(w);
 		if (w >= (1 << 24)) {
@@ -39,11 +39,16 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 		return ret;
 	}
 
+	// Get the next bitset in lexicographical order among the bitsets with the same popcount as x.
 	private int nextChoose(int x){
 		int c=x&-x, r=x+c;
 		return (((r^x)>>2)/c)|r;
 	}
 
+	// The collapse operation is to shift each bit of w to the right by the amount of set bits in b below the current
+	// bit position. Uncollapse is the inverse of this.
+	// This operation is needed, so that nextChoose can iterate on only those black stone configurations, where
+	// the black stones are on fields left empty by the white stones.
 	private long uncollapse(int w, int b){
 		int r=0;
 		for(int i=1; i<1<<24; i<<=1)

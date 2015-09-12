@@ -26,11 +26,27 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.MemoryUtils;
 
+/**
+ * To identify a game state, we need to know where and what pieces are on the board,
+ * and what sector are we in. (The latter is needed, because the number of pieces to placed can't be seen on the board.)
+ *
+ * Note: always white is to move. (See comment in SectorId.java)
+ *
+ * Note: One could have a model of the game, where the situations after closing a mill but before taking a stone
+ * are considered game states as well. For example, the game GUI follows this approach, because there it clearly
+ * fits better. But here, these situations are eliminated by considering the operation of closing a mill and then
+ * taking a stone as _one_ move.
+ */
+
 public class GameState implements Comparable<GameState>, Serializable, KryoSerializable, IOReadableWritable {
 	private static final long serialVersionUID = 1L;
 
 	public SectorId sid;
-	public long board; // 24 mezo van; az also 24 bit a feher korongok, a kovetkezo 24 bit a feketek
+
+	// There are 24 fields on the board, but it is stored in 48 bits.
+	// The first 24 bits are for the white pieces, the next 24 are the blacks.
+	public long board;
+
 
 	public GameState(SectorId sid, long board) {
 		this.sid = sid;
