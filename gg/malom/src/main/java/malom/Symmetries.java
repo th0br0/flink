@@ -24,6 +24,7 @@ package malom;
 
 public class Symmetries {
 
+	// Get the smallest board (considered as just a number) in the orbit.
 	public static long minSym48(long a) {
 		// TODO: Could be sped up by lookuptables
 		long mi = Long.MAX_VALUE;
@@ -33,12 +34,16 @@ public class Symmetries {
 		return mi;
 	}
 
+	// We want to have only the states where the board is the smallest one among the up to 16 boards in the orbit.
 	public static boolean isFiltered(long a) {
 		return minSym48(a) < a;
 	}
 
 
 
+	// We want to do the transformations of the board fast. Therefore, we create lookuptables for bitwise continuous
+	// chunks of the board. We put the final board together, by applying the lookuptables to all the chunks of the
+	// original board, and then unioning (bitwise or) the results together.
 
 	static final int patsize = 8, patc = 1 << patsize;
 
@@ -112,6 +117,8 @@ public class Symmetries {
 		int transform(int a);
 	}
 
+	// The original (slow) implementations, used only in the generation of the lookuptables.
+	// These are generated from the GUI, by clicking on all the symmetric pairs after one another.
 	static int rot90(int a) {
 		int b = 0;
 		b |= (((1 << 0) & a) >> 0) << 2;
