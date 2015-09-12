@@ -64,6 +64,16 @@ public class Retrograde implements Serializable {
 		}).name("Edges");
 	}
 
+	/**
+	 * Initialize main sectors:
+	 *  - states where I can't make a move are losses in 0
+	 *  - other states are initialized to count(inDegree)
+	 *
+	 *  @param g		A graph of a sector family, where vertices of the main sectors are not initialized
+	 *  @param mainSec1	One of the main sectors
+	 *  @param mainSec2 The other main sector (null, if not twin)
+	 *  @returns		g transformed, by initializing the vertices of the main sectors.
+ 	 */
 	public static Graph<GameState, ValueCount, NullValue> countChdAndInitBlocked(
 			Graph<GameState, ValueCount, NullValue> g,
 			SectorId mainSec1, SectorId mainSec2,
@@ -75,12 +85,13 @@ public class Retrograde implements Serializable {
 			public Vertex<GameState, ValueCount> join(Vertex<GameState, ValueCount> vertex, Tuple2<GameState, Long> deg0) throws Exception {
 				long deg = deg0.f1;
 				GameState v = vertex.f0;
-				if (!v.sid.equals(mainSec1) && !v.sid.equals(mainSec2)) {
+				if (!v.sid.equals(mainSec1) && (mainSec2 == null || !v.sid.equals(mainSec2))) {
 					return vertex;
 				} else {
 					if (deg == 0) { // state is blocked
 						return new Vertex<>(v, ValueCount.value(Value.loss(0)));
 					} else { // to be computed by the iteration (set to count for now)
+						// (Note: the first iteration will take child sectors into account.)
 						return new Vertex<>(v, ValueCount.count((int) deg));
 					}
 				}
@@ -88,7 +99,17 @@ public class Retrograde implements Serializable {
 		}), g.getEdges(), env);
 	}
 
-	public static Graph<GameState, ValueCount, NullValue> iterate(Graph<GameState, ValueCount, NullValue> g, ExecutionEnvironment env) {
+	/**
+	 * The core of the computation. We iterate by the order of increasing depth (cf. the assert with getSuperstepNumber).
+	 * Each vertex sends msg at most once, when its final value (loss or win) is determined. (Vertices in child sectors
+	 * do this in the first iteration.)
+	 * Draw states never send a msg.
+	 *
+	 * @param g		A graph of a sector family, where the child sectors have already been solved, and the main sectors
+	 *              have been initialized by countChdAndInitBlocked.
+	 * @return		g transformed, so that the vertices of the main sectors are solved (have their final values).
+	 */
+	public static Graph<GameState, ValueCount, NullValue> iterate(Graph<GameState, ValueCount, NullValue> g) {
 
 		VertexCentricConfiguration config = new VertexCentricConfiguration();
 		//config.setOptDegrees(true);
@@ -105,19 +126,25 @@ public class Retrograde implements Serializable {
 						if (msg.isWin()) { //nyeresbol terjesztunk
 							short newCount = (short) (vv.count - 1);
 							if (newCount == 0) { //elfogyott a count
+								// We have seen all successors, set final value. (will be a loss, because msg is a win)
 								vv = ValueCount.value(msg.undoNegate());
 								newValueSet = true;
 							} else { //nem fogyott el a count
+								// One less successor to wait for
 								vv = ValueCount.count(newCount);
 								newValueSet = true;
 							}
 						} else { //vesztesbol terjesztunk
+							// We can move to a loss, so we have a win.
 							vv = ValueCount.value(msg.undoNegate());
 							newValueSet = true;
 						}
 					} else { //val-ba terjesztunk
+						// This can't be a loss. We set a state to loss only after seeing all its successors, so
+						// why haven't we seen the successor that this msg is coming from?
 						assert vv.value.isWin();
-						assert vv.value.depth <= msg.depth + 1; // (az ultra-nal itt meg valami magic van, ld. a c++ kodban)
+						// We shouldn't have found a better value for a state that we already think we know the final value of.
+						assert vv.value.depth <= msg.depth + 1;
 					}
 				}
 				if(newValueSet) {
@@ -127,6 +154,8 @@ public class Retrograde implements Serializable {
 		}, new MessagingFunction<GameState, ValueCount, Value, NullValue>() {
 			@Override
 			public void sendMessages(Vertex<GameState, ValueCount> vertex) throws Exception {
+				// Note: if we were coding the iteration manually (without Gelly),
+				// we could stuff the below "if" into a filter to be done before joining the workset with the edges.
 				if (vertex.getValue().isValue()) {
 					sendMessageToAllNeighbors(vertex.getValue().value);
 					assert vertex.getValue().value.depth + 1 == getSuperstepNumber();
