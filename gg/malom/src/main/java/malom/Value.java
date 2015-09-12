@@ -5,7 +5,7 @@ import java.io.Serializable;
 public class Value implements Serializable {
 	private static final long serialVersionUID = 1L;
 
-	public byte value;
+	public byte value; // can be LOSS or WIN (draws are represented by counts, see ValueCount)
 	public short depth;
 
 	public Value() {}
@@ -20,7 +20,7 @@ public class Value implements Serializable {
 		this.depth = o.depth;
 	}
 
-	static public byte LOSS = -1, DRAW = 0, WIN = 1;
+	static public byte LOSS = -1, WIN = 1;
 
 	public boolean isWin() {
 		return value == WIN;
@@ -30,20 +30,12 @@ public class Value implements Serializable {
 		return value == LOSS;
 	}
 
-	public boolean isDraw() {
-		return value == DRAW;
-	}
-
 	static public Value win(int depth) {
 		return new Value(WIN, depth);
 	}
 
 	static public Value loss(int depth) {
 		return new Value(LOSS, depth);
-	}
-
-	static public Value draw(int depth) {
-		return new Value(DRAW, depth);
 	}
 
 	public Value undoNegate() {

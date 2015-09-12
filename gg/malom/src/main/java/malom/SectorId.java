@@ -2,10 +2,25 @@ package malom;
 
 import java.io.Serializable;
 
+/**
+ * The state space is subdivided into sectors. A sector is identified by the numbers of stones on the board for each
+ * of the players, and the numbers of stones to be placed on the board for each of the players.
+ *
+ * Note, that you can "negate" a game state in the following sense: switch the colors of all stones on the board,
+ * switch the number of stones to be placed, and switch the player-to-move. A game state and its negation are clearly
+ * equivalent states, so we can eliminate one of them from our state space. This involves "normalizing" all game states
+ * that pop up during the computation. (That is, when we see an eliminated state, we change it to the corresponding
+ * non-eliminated state).
+ * The question that remains, is which of the two corresponding states should be eliminated. One way would be to
+ * have only states where white has at least as many stones on the board as black (Gasser's way (I think)).
+ * But we have chosen to eliminate all the states where black is to move.
+ */
 public class SectorId implements Serializable, Comparable<SectorId> {
 	private static final long serialVersionUID = 1L;
 
-	public byte w, b, wf, bf; // feher es fekete font levo korongszamai, illetve feher es fekete altal meg felrakhato korongok szama
+	// Number of stones for white and black on the board, and number of pices to be placed by the players.
+	// For example the sector of the starting position in standard Mills is 0,0,9,9.
+	public byte w, b, wf, bf;
 
 	public SectorId(byte w, byte b, byte wf, byte bf) {
 		this.w = w;
@@ -43,6 +58,7 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		return r;
 	}
 
+	// All states are losses here
 	public boolean isLosing() {
 		return w + wf < 3; /////////////////////// 3
 	}
@@ -51,10 +67,13 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		return new SectorId(-1, -1, -1, -1);
 	}
 
+	// ESC: Equal Stone Count
 	public boolean isEsc() {
 		return equals(negate());
 	}
 
+	// A sector is transient, if all moves step out from it.
+	// This is the case in standard and morabaraba placement phase.
 	public boolean isTransient() {
 		//#if VARIANT==STANDARD || VARIANT==MORABARABA
 		return !(wf==0 && bf==0);
@@ -63,7 +82,9 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 		//#endif
 	}
 
-	public boolean isTwin() {
+	// ESC sectors don't have a twin, because they are the negations of themselves.
+	// Moreover, transient sectors don't have a twin, because you can't move back and forth between transient sectors.
+	public boolean hasTwin() {
 		return !isEsc() && !isTransient();
 	}
 
@@ -73,12 +94,6 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 //		string r=string(b);
 //		return r;
 //	}
-
-//	bool operator<(const id &o) const {return make_pair(make_pair(w,b),make_pair(wf,bf)) < make_pair(make_pair(o.w,o.b),make_pair(o.wf,o.bf));}
-//	bool operator>(const id &o) const {return make_pair(make_pair(w,b),make_pair(wf,bf)) > make_pair(make_pair(o.w,o.b),make_pair(o.wf,o.bf));}
-//
-//	bool operator==(const id &o) const {return w==o.w && b==o.b && wf==o.wf && bf==o.bf;}
-//	bool operator!=(const id &o) const {return !(*this==o);}
 
 	@Override
 	public int compareTo(SectorId o) {
