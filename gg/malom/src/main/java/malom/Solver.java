@@ -11,6 +11,7 @@ import org.apache.flink.graph.Graph;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.types.NullValue;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,9 +24,10 @@ public class Solver {
 
 	public static void main(String[] args) throws Exception {
 
-		System.out.println("VIGYAZAT! adjmasks atirva! (de csak felig, a can_close_mill-ben nem)");
+		System.out.println("VIGYAZAT! adjmasks atirva!");
 		//System.out.println("VIGYAZAT! lose condition atirva!");
 
+		Config.outPath = args[0];
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
@@ -58,14 +60,10 @@ public class Solver {
 
 
 		SectorGraph sectorGraph = new SectorGraph(env);
-		DataSet<Vertex<GameState, ValueCount>> res = sectorGraph.solve(new SectorId(3,3,0,0));
+		sectorGraph.solve(new SectorId(3,4,0,0));
 
-		//Verify.verify(res, args[1]);
-
-		res.writeAsText(args[0], FileSystem.WriteMode.OVERWRITE);
-
-		env.execute();
-		//System.out.println(env.getExecutionPlan());
+		//env.execute();
+		System.out.println(env.getExecutionPlan());
 
 
 //		List<Vertex<GameState, ValueCount>> resList = res.getVertices().collect();
