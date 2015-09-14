@@ -14,15 +14,15 @@ public class Solver {
 		Config.outPath = args[0];
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(1);
+		//env.setParallelism(1);
 
 		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 
 		//-Xmx8g -Xms8g
 
-		SectorGraph sectorGraph = new SectorGraph(env);
-		sectorGraph.solve(new SectorId(3,4,0,0));
+		Retrograde retrograde = new Retrograde(env);
+		retrograde.solve(new SectorId(3,3,0,0));
 		//sectorGraph.solve(new SectorId(5,5,0,0));
 
 		env.execute();
