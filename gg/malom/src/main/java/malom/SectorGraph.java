@@ -1,7 +1,6 @@
 package malom;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * This class represents the subdivision of the state space into sectors.
@@ -9,6 +8,26 @@ import java.util.List;
  * u sector to v sector, if there is a game state in u from where you can make a movoe to a game state in v.
  */
 public class SectorGraph {
+
+	public static void createSectorFamily(SectorId u, Set<SectorId> mainSectors, Set<SectorId> chdSectors, List<SectorId> sectorFamily) {
+		// The main sectors are the one or two sectors of the work unit.
+		// The child sectors are those sectors, that the main sectors directly depend on.
+		// The sector family is all these together.
+
+		mainSectors.add(u);
+		mainSectors.add(u.negate());
+
+		for(SectorId mainSec: mainSectors) {
+			for(SectorId chdSec: SectorGraph.graphFunc(mainSec)) {
+				if(!mainSectors.contains(chdSec)) {
+					chdSectors.add(chdSec);
+				}
+			}
+		}
+		assert chdSectors.size() > 0;
+		sectorFamily.addAll(mainSectors);
+		sectorFamily.addAll(chdSectors);
+	}
 
 	// Returns the outgoing edges from a sector
 	public static List<SectorId> graphFunc(SectorId u) {

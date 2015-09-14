@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * This will be the "value type" of the state graph in Gelly terminology.
  * Contains either a value or a count:
- *  - Count means the number of successors not yet determined to be a win.
+ *  - Count means the number of successors not yet processed.
  *    It also means that we haven't seen a loss successor.
  *    (If iterate has already run, then being a count means that this node has been determined to be a draw.)
  *  - value means that we know the final value of the node to be either a win or loss

@@ -49,23 +49,10 @@ public class Retrograde implements Serializable {
 			results.put(u, createSectorVertices(u, ValueCount.value(Value.loss(0))));
 		} else {
 
-			// The main sectors are the one or two sectors of the work unit.
-			// The child sectors are those sectors, that the main sectors directly depend on.
-			// The sector family is all these together.
-
-			Set<SectorId> mainSectors = new HashSet<>(Arrays.asList(u, u.negate()));
-			Set<SectorId> chdSectors = new HashSet<>();
-			for(SectorId mainSec: mainSectors) {
-				for(SectorId chdSec: SectorGraph.graphFunc(mainSec)) {
-					if(!mainSectors.contains(chdSec)) {
-						chdSectors.add(chdSec);
-					}
-				}
-			}
-			assert chdSectors.size() > 0;
-			List<SectorId> sectorFamily = new ArrayList<>();
-			sectorFamily.addAll(mainSectors);
-			sectorFamily.addAll(chdSectors);
+			// (See comment in createSectorFamily)
+			Set<SectorId> mainSectors, chdSectors;
+			List<SectorId> sectorFamily;
+			SectorGraph.createSectorFamily(u, mainSectors = new HashSet<>(), chdSectors = new HashSet<>(), sectorFamily = new ArrayList<>());
 
 			// The vertices DataSet will consist of all the vertices of the sector family.
 			// - vertices of child sectors will have been already solved
@@ -171,8 +158,6 @@ public class Retrograde implements Serializable {
 			Graph<GameState, ValueCount, NullValue> g,
 			SectorId mainSec1, SectorId mainSec2,
 			ExecutionEnvironment env) {
-		// Set losses to 0, and
-		// set others to count(deg)
 		return Graph.fromDataSet(g.getVertices().join(g.inDegrees()).where(0).equalTo(0).with(new JoinFunction<Vertex<GameState, ValueCount>, Tuple2<GameState, Long>, Vertex<GameState, ValueCount>>() {
 			@Override
 			public Vertex<GameState, ValueCount> join(Vertex<GameState, ValueCount> vertex, Tuple2<GameState, Long> deg0) throws Exception {

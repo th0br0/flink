@@ -3,6 +3,8 @@ package malom;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 
+//-Xmx8g -Xms8g
+
 public class Solver {
 
 	public static void main(String[] args) throws Exception {
@@ -15,11 +17,11 @@ public class Solver {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		//env.setParallelism(1);
+		//env.getConfig().enableObjectReuse(); // has only negligible impact on the Gelly version
 
 		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 
-		//-Xmx8g -Xms8g
 
 		Retrograde retrograde = new Retrograde(env);
 		retrograde.solve(new SectorId(3,3,0,0));
