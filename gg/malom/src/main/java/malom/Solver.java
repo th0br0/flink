@@ -22,9 +22,12 @@ public class Solver {
 		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 
+		// TODO: test speed with and without assertions
 
-		Retrograde retrograde = new Retrograde(env);
-		retrograde.solve(new SectorId(3,3,0,0));
+
+		//Retrograde retrograde = new Retrograde(env);
+		RetrogradeWithoutGelly retrograde = new RetrogradeWithoutGelly(env);
+		retrograde.solve(new SectorId(3,4,0,0));
 		//sectorGraph.solve(new SectorId(5,5,0,0));
 
 		env.execute();

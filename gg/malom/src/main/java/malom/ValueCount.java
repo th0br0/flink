@@ -38,6 +38,12 @@ public class ValueCount implements Serializable {
 		return r;
 	}
 
+	public static ValueCount count(short c){
+		ValueCount r = new ValueCount();
+		r.count = c;
+		return r;
+	}
+
 	public static ValueCount count(int c){
 		ValueCount r = new ValueCount();
 		r.count = (short)c;

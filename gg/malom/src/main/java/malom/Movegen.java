@@ -141,6 +141,7 @@ public class Movegen implements Serializable {
 
 	Adj[][][][] adjs = new Adj[Config.maxPieceCount + 1][Config.maxPieceCount + 1][Config.maxPieceCount + 1][Config.maxPieceCount + 1];
 
+	// (Generates only those unmoves whose targets are in main sectors)
 	Movegen(Collection<SectorId> sectors, Collection<SectorId> mainSectors0) {
 		HashSet<SectorId> mainSectors = new HashSet<>(mainSectors0);
 		for(SectorId s: sectors) {
