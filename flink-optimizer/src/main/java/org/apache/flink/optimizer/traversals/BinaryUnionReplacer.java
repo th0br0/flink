@@ -110,7 +110,7 @@ public class BinaryUnionReplacer implements Visitor<PlanNode> {
 		if (in.getSource() instanceof NAryUnionPlanNode) {
 			// sanity check
 			if (in.getShipStrategy() != ShipStrategyType.FORWARD) {
-				throw new CompilerException("Bug: Plan generation for Unions picked a ship strategy between binary plan operators.");
+				//throw new CompilerException("Bug: Plan generation for Unions picked a ship strategy between binary plan operators.");
 			}
 			if (!(in.getLocalStrategy() == null || in.getLocalStrategy() == LocalStrategy.NONE)) {
 				throw new CompilerException("Bug: Plan generation for Unions picked a local strategy between binary plan operators.");
