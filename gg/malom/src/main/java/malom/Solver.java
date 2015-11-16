@@ -32,8 +32,8 @@ public class Solver {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
 
-		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
-		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
+		//PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
+		//PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 
 
 //		ArrayList<SectorId> sectors = new ArrayList<SectorId>();

@@ -47,16 +47,17 @@ public class Movegen implements Serializable {
 	static final long mask24 = (1<<24) - 1;
 
 	static {
-		System.out.println("Movegen static init");
-		try {
-			if(new File(Config.movegenFile).exists()) {
-				read_movegen();
-			} else {
-				write_movegen();
-			}
-		} catch (IOException e) {
-			throw new RuntimeException("IOException when initializing movegen");
-		}
+		System.out.println("Skipping Movegen static init");
+//		System.out.println("Movegen static init");
+//		try {
+//			if(new File(Config.movegenFile).exists()) {
+//				read_movegen();
+//			} else {
+//				write_movegen();
+//			}
+//		} catch (IOException e) {
+//			throw new RuntimeException("IOException when initializing movegen");
+//		}
 	}
 
 	static void write_movegen() throws IOException {

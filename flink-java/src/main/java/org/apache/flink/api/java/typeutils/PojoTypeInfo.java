@@ -286,22 +286,22 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 		return -1;
 	}
 
-	///
-	static Map<Class<?>, Class<? extends TypeSerializer>> customSerializers = new HashMap<>();
-
-	public static <C, S extends TypeSerializer<C>> void registerCustomSerializer(Class<C> c, Class<S> s) {
-		customSerializers.put(c, s);
-	}
-	///
+//	///
+//	static Map<Class<?>, Class<? extends TypeSerializer>> customSerializers = new HashMap<>();
+//
+//	public static <C, S extends TypeSerializer<C>> void registerCustomSerializer(Class<C> c, Class<S> s) {
+//		customSerializers.put(c, s);
+//	}
+//	///
 
 	@Override
 	public TypeSerializer<T> createSerializer(ExecutionConfig config) {
 
-		///
-		if(customSerializers.containsKey(this.typeClass)) {
-			return InstantiationUtil.instantiate(customSerializers.get(this.typeClass));
-		}
-		///
+//		///
+//		if(customSerializers.containsKey(this.typeClass)) {
+//			return InstantiationUtil.instantiate(customSerializers.get(this.typeClass));
+//		}
+//		///
 
 		if(config.isForceKryoEnabled()) {
 			return new KryoSerializer<T>(getTypeClass(), config);
