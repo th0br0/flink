@@ -23,14 +23,14 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
-import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.util.SplittableIterator;
 
 import java.io.Serializable;
 import java.util.Iterator;
 import java.util.Random;
 
 public class ReducePerformance {
-
+	
 	public static void main(String[] args) throws Exception {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -39,26 +39,34 @@ public class ReducePerformance {
 
 		@SuppressWarnings("unchecked")
 		DataSet<Tuple2<Integer, Integer>> output =
-			env.fromCollection(new TupleIntIntIterator(3 * 1000 * 1000, 1 * 1000 * 1000),
+			env.fromParallelCollection(new SplittableRandomIterator(40 * 1000 * 1000, new TupleIntIntIterator(4 * 1000 * 1000)),
 				TupleTypeInfo.<Tuple2<Integer, Integer>>getBasicTupleTypeInfo(Integer.class, Integer.class))
 				.groupBy("0")
 				.reduce(new SumReducer());
 
-		output.writeAsCsv("/tmp/xxxobjectreusebug", "\n", " ", FileSystem.WriteMode.OVERWRITE);
-		System.out.println(output.count() + "  (THIS NUMBER SHOULD NOT BE GREATER THAN 1000000)");
+//		DataSet<Tuple2<Integer, Integer>> output =
+//			env.fromParallelCollection(new SplittableRandomIterator(40 * 1000 * 1000, new TupleStringIntIterator(4 * 1000 * 1000)),
+//				TupleTypeInfo.<Tuple2<String, Integer>>getBasicTupleTypeInfo(String.class, Integer.class))
+//				.groupBy("0")
+//				.reduce(new SumReducer());
+
+		long start = System.currentTimeMillis();
+
+		System.out.println(output.count());
+
+		long end = System.currentTimeMillis();
+		System.out.println("time: " + (end - start) + "ms");
 	}
 
-	private static final class TupleIntIntIterator implements Iterator<Tuple2<Integer, Integer>>, Serializable {
+	private static final class SplittableRandomIterator<T, B extends CopyableIterator<T>> extends SplittableIterator<T> implements Serializable {
 
 		private int numElements;
-		private final int keyRange;
+		private final B baseIterator;
 
-		public TupleIntIntIterator(int numElements, int keyRange) {
+		public SplittableRandomIterator(int numElements, B baseIterator) {
 			this.numElements = numElements;
-			this.keyRange = keyRange;
+			this.baseIterator = baseIterator;
 		}
-
-		private final Random rnd = new Random(123);
 
 		@Override
 		public boolean hasNext() {
@@ -66,17 +74,105 @@ public class ReducePerformance {
 		}
 
 		@Override
-		public Tuple2<Integer, Integer> next() {
+		public T next() {
 			numElements--;
-			Tuple2<Integer, Integer> ret = new Tuple2<Integer, Integer>();
-			ret.f0 = rnd.nextInt(keyRange);
-			ret.f1 = 1;
-			return ret;
+			return baseIterator.next();
+		}
+
+		@SuppressWarnings("unchecked")
+		@Override
+		public SplittableRandomIterator<T, B>[] split(int numPartitions) {
+			int splitSize = numElements / numPartitions;
+			int rem = numElements % numPartitions;
+			SplittableRandomIterator<T, B>[] res = new SplittableRandomIterator[numPartitions];
+			for (int i = 0; i < numPartitions; i++) {
+				res[i] = new SplittableRandomIterator<T, B>(i < rem ? splitSize : splitSize + 1, (B)baseIterator.copy());
+			}
+			return res;
+		}
+
+		@Override
+		public int getMaximumNumberOfSplits() {
+			return numElements;
 		}
 
 		@Override
 		public void remove() {
 			throw new UnsupportedOperationException();
+		}
+	}
+
+	private interface CopyableIterator<T> extends Iterator<T> {
+		CopyableIterator<T> copy();
+	}
+
+
+	private static final class TupleIntIntIterator implements CopyableIterator<Tuple2<Integer, Integer>>, Serializable {
+
+		private final int keyRange;
+		private Tuple2<Integer, Integer> reuse = new Tuple2<Integer, Integer>();
+
+		public TupleIntIntIterator(int keyRange) {
+			this.keyRange = keyRange;
+		}
+
+		private final Random rnd = new Random();
+
+		@Override
+		public boolean hasNext() {
+			return true;
+		}
+
+		@Override
+		public Tuple2<Integer, Integer> next() {
+			reuse.f0 = rnd.nextInt(keyRange);
+			reuse.f1 = 1;
+			return reuse;
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public CopyableIterator<Tuple2<Integer, Integer>> copy() {
+			return new TupleIntIntIterator(keyRange);
+		}
+	}
+
+
+	private static final class TupleStringIntIterator implements CopyableIterator<Tuple2<String, Integer>>, Serializable {
+
+		private final int keyRange;
+		private Tuple2<String, Integer> reuse = new Tuple2<>();
+
+		public TupleStringIntIterator(int keyRange) {
+			this.keyRange = keyRange;
+		}
+
+		private final Random rnd = new Random();
+
+		@Override
+		public boolean hasNext() {
+			return true;
+		}
+
+		@Override
+		public Tuple2<String, Integer> next() {
+			reuse.f0 = String.valueOf(rnd.nextInt(keyRange));
+			reuse.f1 = 1;
+			return reuse;
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public CopyableIterator<Tuple2<String, Integer>> copy() {
+			return new TupleStringIntIterator(keyRange);
 		}
 	}
 
