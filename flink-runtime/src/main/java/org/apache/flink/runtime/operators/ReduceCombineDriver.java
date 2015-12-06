@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.runtime.operators.hash.ReduceHashTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.flink.api.common.functions.ReduceFunction;
@@ -62,10 +63,14 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 	private ReduceFunction<T> reducer;
 	
 	private Collector<T> output;
-	
+
+	private DriverStrategy strategy;
+
 	private InMemorySorter<T> sorter;
 	
 	private QuickSort sortAlgo = new QuickSort();
+
+	private ReduceHashTable<T> table;
 
 	private List<MemorySegment> memory;
 
@@ -101,9 +106,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 
 	@Override
 	public void prepare() throws Exception {
-		if (this.taskContext.getTaskConfig().getDriverStrategy() != DriverStrategy.SORTED_PARTIAL_REDUCE) {
-			throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
-		}
+		strategy = this.taskContext.getTaskConfig().getDriverStrategy();
 		
 		// instantiate the serializer / comparator
 		final TypeSerializerFactory<T> serializerFactory = this.taskContext.getInputSerializer(0);
@@ -117,13 +120,21 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				this.taskContext.getTaskConfig().getRelativeMemoryDriver());
 		this.memory = memManager.allocatePages(this.taskContext.getOwningNepheleTask(), numMemoryPages);
 
-		// instantiate a fix-length in-place sorter, if possible, otherwise the out-of-place sorter
-		if (this.comparator.supportsSerializationWithKeyNormalization() &&
-			this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING)
-		{
-			this.sorter = new FixedLengthRecordSorter<T>(this.serializer, this.comparator, memory);
-		} else {
-			this.sorter = new NormalizedKeySorter<T>(this.serializer, this.comparator.duplicate(), memory);
+		switch (strategy) {
+			case SORTED_PARTIAL_REDUCE:
+				// instantiate a fix-length in-place sorter, if possible, otherwise the out-of-place sorter
+				if (this.comparator.supportsSerializationWithKeyNormalization() &&
+					this.serializer.getLength() > 0 && this.serializer.getLength() <= THRESHOLD_FOR_IN_PLACE_SORTING) {
+					this.sorter = new FixedLengthRecordSorter<T>(this.serializer, this.comparator, memory);
+				} else {
+					this.sorter = new NormalizedKeySorter<T>(this.serializer, this.comparator.duplicate(), memory);
+				}
+				break;
+			case HASHED_PARTIAL_REDUCE:
+				this.table = new ReduceHashTable<T>(this.serializer, this.comparator, this.reducer, memory, this.output, objectReuseEnabled);
+				break;
+			default:
+				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
 		}
 
 		ExecutionConfig executionConfig = taskContext.getExecutionConfig();
@@ -142,49 +153,97 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 		
 		final MutableObjectIterator<T> in = this.taskContext.getInput(0);
 		final TypeSerializer<T> serializer = this.serializer;
-		
-		if (objectReuseEnabled) {
-			T value = serializer.createInstance();
-		
-			while (running && (value = in.next(value)) != null) {
-				
-				// try writing to the sorter first
-				if (this.sorter.write(value)) {
-					continue;
+
+		switch (strategy) {
+			case SORTED_PARTIAL_REDUCE:
+				if (objectReuseEnabled) {
+					T value = serializer.createInstance();
+
+					while (running && (value = in.next(value)) != null) {
+
+						// try writing to the sorter first
+						if (this.sorter.write(value)) {
+							continue;
+						}
+
+						// do the actual sorting, combining, and data writing
+						sortAndCombine();
+						this.sorter.reset();
+
+						// write the value again
+						if (!this.sorter.write(value)) {
+							throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+						}
+					}
+				} else {
+					T value;
+					while (running && (value = in.next()) != null) {
+
+						// try writing to the sorter first
+						if (this.sorter.write(value)) {
+							continue;
+						}
+
+						// do the actual sorting, combining, and data writing
+						sortAndCombine();
+						this.sorter.reset();
+
+						// write the value again
+						if (!this.sorter.write(value)) {
+							throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+						}
+					}
 				}
-		
-				// do the actual sorting, combining, and data writing
+
+				// sort, combine, and send the final batch
 				sortAndCombine();
-				this.sorter.reset();
-				
-				// write the value again
-				if (!this.sorter.write(value)) {
-					throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
+
+				break;
+			case HASHED_PARTIAL_REDUCE:
+				if (objectReuseEnabled) {
+					T value = serializer.createInstance();
+
+					while (running && (value = in.next(value)) != null) {
+
+						// try writing to the hash table first
+						if (this.table.processRecord(value)) {
+							continue;
+						}
+
+						// memory is full. emit current aggregates and reset the table.
+						table.emit();
+
+						// write the value again
+						if (!this.table.processRecord(value)) {
+							throw new IOException("Cannot write record to fresh hash table.");
+						}
+					}
+				} else {
+					T value;
+					while (running && (value = in.next()) != null) {
+
+						// try writing to the hash table first
+						if (this.table.processRecord(value)) {
+							continue;
+						}
+
+						// memory is full. emit current aggregates and reset the table.
+						table.emit();
+
+						// write the value again
+						if (!this.table.processRecord(value)) {
+							throw new IOException("Cannot write record to fresh hash table.");
+						}
+					}
 				}
-			}
+
+				// send the final batch
+				table.emit();
+
+				break;
+//			default:
+//				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
 		}
-		else {
-			T value;
-			while (running && (value = in.next()) != null) {
-
-				// try writing to the sorter first
-				if (this.sorter.write(value)) {
-					continue;
-				}
-
-				// do the actual sorting, combining, and data writing
-				sortAndCombine();
-				this.sorter.reset();
-
-				// write the value again
-				if (!this.sorter.write(value)) {
-					throw new IOException("Cannot write record to fresh sort buffer. Record too large.");
-				}
-			}
-		}
-		
-		// sort, combine, and send the final batch
-		sortAndCombine();
 	}
 		
 	private void sortAndCombine() throws Exception {
@@ -263,7 +322,9 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 
 	@Override
 	public void cleanup() {
-		this.sorter.dispose();
+		if (this.sorter != null) {
+			this.sorter.dispose();
+		}
 		this.taskContext.getMemoryManager().release(this.memory);
 	}
 

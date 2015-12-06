@@ -61,9 +61,13 @@ public class RandomAccessInputView extends AbstractPagedInputView implements See
 	public void setReadPosition(long position) {
 		final int bufferNum = (int) (position >>> this.segmentSizeBits);
 		final int offset = (int) (position & this.segmentSizeMask);
-		
+
 		this.currentSegmentIndex = bufferNum;
 		seekInput(this.segments.get(bufferNum), offset, bufferNum < this.segments.size() - 1 ? this.segmentSize : this.limitInLastSegment);
+	}
+
+	public long getReadPosition() {
+		return (((long) currentSegmentIndex) << segmentSizeBits) + getCurrentPositionInSegment();
 	}
 
 

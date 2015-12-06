@@ -75,7 +75,8 @@ public final class ReduceProperties extends OperatorDescriptorSingle {
 
 			SingleInputPlanNode combiner = new SingleInputPlanNode(combinerNode,
 								"Combine ("+node.getOperator().getName()+")", toCombiner,
-								DriverStrategy.SORTED_PARTIAL_REDUCE, this.keyList);
+								//DriverStrategy.SORTED_PARTIAL_REDUCE, this.keyList);
+								DriverStrategy.HASHED_PARTIAL_REDUCE, this.keyList);
 
 			combiner.setCosts(new Costs(0, 0));
 			combiner.initProperties(toCombiner.getGlobalProperties(), toCombiner.getLocalProperties());
