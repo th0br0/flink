@@ -33,6 +33,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * todo: comment on hash table structure
+ *
+ * (beleirni, hogy ha csokkent eg yrecord merete, akkor elvesztjuk az infot az eredeti meretrol, vagyis ha visszano,
+ * akkor uj helyet fogunk foglalni)
+ */
+
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> {
 
@@ -170,7 +177,7 @@ public class ReduceHashTable<T> {
 	 * otherwise inserts a new entry.
 	 *
 	 * @param record The record to be processed.
-	 * @return A boolean that signals whether the operation succeded
+	 * @return A boolean that signals whether the operation succeded, or we have run out of memory.
 	 */
 	public boolean processRecord(T record) throws Exception {
 		final int hashCode = Math.abs(this.comparator.hash(record));
@@ -186,8 +193,14 @@ public class ReduceHashTable<T> {
 		T currentRecordInList = this.reuse;
 
 		long currentPointer = bucketSegments[bucketSegmentIndex].getLong(bucketOffset);
+		boolean hadSizeGrowth = false;
 		long prevPointer = INVALID_PREV_POINTER;
 		while (currentPointer != END_OF_LIST) {
+
+			// the sign bit of currentPointer stores whether we had a record size change at this key before
+			hadSizeGrowth = currentPointer < 0;
+			currentPointer = Math.abs(currentPointer);
+
 			recordSegmentsInView.setReadPosition(currentPointer + RECORD_OFFSET_IN_LINK);
 			currentRecordInList = this.serializer.deserialize(currentRecordInList, recordSegmentsInView);
 			if (this.comparator.equalToReference(currentRecordInList)) {
@@ -201,7 +214,7 @@ public class ReduceHashTable<T> {
 		}
 
 		if (currentPointer == END_OF_LIST) {
-			// linked list didn't contain the key, append
+			// linked list doesn't contain the key, append
 
 			//todo: szamolni a load factort, es resizeTable
 
@@ -210,7 +223,7 @@ public class ReduceHashTable<T> {
 			try {
 				pointerToAppended = recordSegmentsOutView.appendNilPointerAndRecord(record);
 			} catch (EOFException ex) {
-				return false;
+				return false; // we have run out of memory
 			}
 
 			// add new link to the list
@@ -221,34 +234,45 @@ public class ReduceHashTable<T> {
 				recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
 			}
 		} else {
-			// linked list contains the key; overwrite or remove and append new (if larger)
+			// linked list contains the key
 
-			//todo: duplazas
-			// a 8 byte-os pointer elojel bitjeben tarolom, hogy volt-e mar noveles ezen a rekordon, es ha volt,
-			// akkor mindenkeppen kettohatvanyra lesz folfele kerekitve
-
-			final long oldRecordSize = recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK);
-
+			// do the reduce step
 			T res = reducer.reduce(currentRecordInList, record);
 
+			// determine the new size
 			stagingSegmentsOutView.reset();
 			serializer.serialize(res, stagingSegmentsOutView);
 			final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
 			stagingSegmentsInView.setReadPosition(0);
-			if (newRecordSize <= oldRecordSize) {
+
+			// Determine the size of the place of the old record.
+			// Note, that if we had a size growth before, then the size will have been rounded up to the nearest
+			// power of 2.
+			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
+			final int oldRecordPlaceSize = hadSizeGrowth ? MathUtils.roundUpToPowerOf2(oldRecordSize) : oldRecordSize;
+
+			if (newRecordSize <= oldRecordPlaceSize) {
 				// overwrite record at its original place
 				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
+				// note: sign of next pointer in previous link is OK, no need to modify it
 			} else {
-				// new record doesn't fit in place of old. Append new at end of recordSegments, and modify the linked list
+				// new record doesn't fit in place of old, append new at end of recordSegments.
+
+				// get pointer to next
 				recordSegmentsInView.setReadPosition(currentPointer);
 				final long nextPointer = recordSegmentsInView.readLong();
+
+				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
 				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecord(nextPointer, stagingSegmentsInView, newRecordSize);
+					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(nextPointer, stagingSegmentsInView,
+						newRecordSize, MathUtils.roundUpToPowerOf2(newRecordSize) - newRecordSize);
+
+				// modify the pointer in the previous link
 				if (prevPointer == INVALID_PREV_POINTER) {
 					// list had only one element, so prev is in the bucketSegments
-					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
+					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, -pointerToAppended);
 				} else {
-					recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
+					recordSegmentsOutView.overwriteLongAt(prevPointer, -pointerToAppended);
 				}
 			}
 
@@ -272,6 +296,7 @@ public class ReduceHashTable<T> {
 			for (int j = 0; j < numBucketsPerSegment; j++) {
 				long curElemPointer = seg.getLong(j << this.bucketSizeBits);
 				while (curElemPointer != END_OF_LIST) {
+					curElemPointer = Math.abs(curElemPointer);
 					recordSegmentsInView.setReadPosition(curElemPointer);
 					curElemPointer = recordSegmentsInView.readLong();
 					serializer.deserialize(reuse, recordSegmentsInView);
@@ -301,6 +326,8 @@ public class ReduceHashTable<T> {
 	 *  - can write a record to an arbitrary position (WARNING: the new record must not be larger than the old one)
 	 *  - can append a record (with a specified pointer before it)
 	 *  - takes memory from ReduceHashTable.freeMemory on append
+	 * Warning: Do not call the write* methods of AbstractPagedOutputView directly, because lastPosition has to be
+	 * modified when appending data.
 	 */
 	public class AppendableRandomAccessOutputView extends AbstractPagedOutputView
 	{
@@ -411,16 +438,17 @@ public class ReduceHashTable<T> {
 		 * Appends a pointer and a record. The record is read from a DataInputView (this will be the staging area).
 		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
 		 * @param input The DataInputView to read the record from
-		 * @param size The size of the record
+		 * @param recordSize The size of the record
 		 * @return A pointer to the written data
 		 * @throws IOException
 		 */
-		public long appendPointerAndCopyRecord(long pointer, DataInputView input, int size) throws IOException {
+		public long appendPointerAndCopyRecordAndSkip(long pointer, DataInputView input, int recordSize, int skipSize) throws IOException {
 			setWritePosition(lastPosition);
 			final long oldLastPosition = lastPosition;
 			writeLong(pointer);
-			write(input, size);
-			lastPosition += 8 + size;
+			write(input, recordSize);
+			skipBytesToWrite(skipSize);
+			lastPosition += 8 + recordSize + skipSize;
 			return oldLastPosition;
 		}
 

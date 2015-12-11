@@ -194,7 +194,7 @@ public class ReduceHashTableTest {
 		ReduceHashTable<StringPair> table = new ReduceHashTable<>(
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
 
-		// Process some little manual stuff
+		// Process some manual stuff
 		reference.processRecord(serializer.copy(new StringPair("foo", "bar")), "foo");
 		reference.processRecord(serializer.copy(new StringPair("foo", "baz")), "foo");
 		reference.processRecord(serializer.copy(new StringPair("alma", "xyz")), "alma");
