@@ -91,7 +91,7 @@ public class ReduceHashTableTest {
 	public void testWithIntPair() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
 
-		final int keySize = 1000;
+		final int keySize = 100000;
 		final int valueSize = 10;
 		final int numRecords = 1000000;
 
@@ -125,7 +125,7 @@ public class ReduceHashTableTest {
 		}
 
 		//System.out.println("start"); //todo remove
-
+		//long start = System.currentTimeMillis();
 
 		// Process the generated input
 		final int numIntermingledEmits = 5;
@@ -141,7 +141,8 @@ public class ReduceHashTableTest {
 		reference.emit();
 		table.emit();
 
-		//System.out.println("stop"); //todo remove
+//		long end = System.currentTimeMillis();
+//		System.out.println("stop, time: " + (end - start)); //todo remove
 
 		// Check results
 
