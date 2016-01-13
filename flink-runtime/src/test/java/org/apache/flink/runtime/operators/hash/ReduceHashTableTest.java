@@ -89,7 +89,7 @@ public class ReduceHashTableTest {
 	public void testWithIntPair() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
 
-		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses)
+		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses (also in the segment arrays))
 		final int valueRange = 10;
 		final int numRecords = 10000000;
 

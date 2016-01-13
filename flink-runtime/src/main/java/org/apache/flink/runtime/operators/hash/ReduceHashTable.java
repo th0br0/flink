@@ -51,12 +51,12 @@ public class ReduceHashTable<T> {
 	/**
 	 * The next pointer of the last link in the linked lists will have this as next pointer.
 	 */
-	private static final long END_OF_LIST = -1;
+	private static final long END_OF_LIST = 1L<<62; // warning: because of the sign bit trickery, this can't be 0 or negative
 
 	/**
 	 * This value means that the prevPointer is "pointing to the bucket", and not into the record segments.
  	 */
-	final long INVALID_PREV_POINTER = -2;
+	private static final long INVALID_PREV_POINTER = -2;
 
 	private static final long RECORD_OFFSET_IN_LINK = 8;
 
@@ -88,7 +88,7 @@ public class ReduceHashTable<T> {
 	 */
 	private MemorySegment[] bucketSegments;
 
-	private final int bucketSize = 8, bucketSizeBits = 3;
+	private static final int bucketSize = 8, bucketSizeBits = 3;
 
 	private int numBuckets;
 	private final int numBucketsPerSegment, numBucketsPerSegmentBits, numBucketsPerSegmentMask;
@@ -162,7 +162,7 @@ public class ReduceHashTable<T> {
 			segments[i] = allocateSegment();
 			// Init all pointers in all buckets to END_OF_LIST
 			for(int j = 0; j < this.numBucketsPerSegment; j++) {
-				segments[i].putLong(j << this.bucketSizeBits, END_OF_LIST);
+				segments[i].putLong(j << bucketSizeBits, END_OF_LIST);
 			}
 		}
 	}
@@ -191,23 +191,25 @@ public class ReduceHashTable<T> {
 		final int hashCode = hash(record);
 		final int bucket = hashCode % this.numBuckets;
 		final int bucketSegmentIndex = bucket >>> this.numBucketsPerSegmentBits; // which segment contains the bucket
-		final int bucketOffset = (bucket & this.numBucketsPerSegmentMask) << this.bucketSizeBits; // offset of the bucket in the segment
+		final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
+		final int bucketOffset = (bucket & this.numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+
+		long currentPointer = bucketSegment.getLong(bucketOffset);
 
 		this.comparator.setReference(record);
 
 		T currentRecordInList = this.reuse;
 
-		long currentPointer = bucketSegments[bucketSegmentIndex].getLong(bucketOffset);
-		boolean hadSizeGrowth = false;
+		boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
 		long prevPointer = INVALID_PREV_POINTER;
+		long nextPointer = END_OF_LIST; // (this initial value is actually unused)
 		while (currentPointer != END_OF_LIST) {
-
-			// the sign bit of currentPointer stores whether we had a record size change at this key before
-			hadSizeGrowth = currentPointer < 0;
-			currentPointer = Math.abs(currentPointer);
-
 			recordSegmentsInView.setReadPosition(currentPointer);
-			final long nextPointer = recordSegmentsInView.readLong();
+			nextPointer = recordSegmentsInView.readLong();
+			// the sign bit of nextPointer stores whether we had a record size change at this key before
+			prevHadSizeGrowth = hadSizeGrowth;
+			hadSizeGrowth = nextPointer < 0;
+			nextPointer = Math.abs(nextPointer);
 
 			currentRecordInList = this.serializer.deserialize(currentRecordInList, recordSegmentsInView);
 			if (this.comparator.equalToReference(currentRecordInList)) {
@@ -237,7 +239,7 @@ public class ReduceHashTable<T> {
 				// list was empty
 				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 			} else {
-				recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
+				recordSegmentsOutView.overwriteLongAt(prevPointer, hadSizeGrowth ? -pointerToAppended : pointerToAppended);
 			}
 		} else {
 			// linked list contains the key
@@ -264,21 +266,17 @@ public class ReduceHashTable<T> {
 			} else {
 				// new record doesn't fit in place of old, append new at end of recordSegments.
 
-				// get pointer to next
-				recordSegmentsInView.setReadPosition(currentPointer);
-				final long nextPointer = recordSegmentsInView.readLong();
-
 				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
 				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(nextPointer, stagingSegmentsInView,
+					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(-Math.abs(nextPointer), stagingSegmentsInView,
 						newRecordSize, MathUtils.roundUpToPowerOf2(newRecordSize) - newRecordSize);
 
 				// modify the pointer in the previous link
 				if (prevPointer == INVALID_PREV_POINTER) {
 					// list had only one element, so prev is in the bucketSegments
-					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, -pointerToAppended);
+					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 				} else {
-					recordSegmentsOutView.overwriteLongAt(prevPointer, -pointerToAppended);
+					recordSegmentsOutView.overwriteLongAt(prevPointer, prevHadSizeGrowth ? -pointerToAppended : pointerToAppended);
 				}
 			}
 
@@ -298,6 +296,9 @@ public class ReduceHashTable<T> {
 		// We allocate a new array of bucket segments, that has the same size as the old,
 		// move some of the records to the new segments, and then concatenate the two arrays.
 
+		// vagy lehet, hogy ezt olyan vegigmenessel jobb lenne, mint amit a compact csinal?
+		//	 nem tudom, hogy gyorsabb lenne-e, de talan tobb code reuse lehetne ugy
+
 		MemorySegment[] newBucketSegments = new MemorySegment[this.bucketSegments.length];
 		initBucketSegments(newBucketSegments);
 
@@ -310,10 +311,13 @@ public class ReduceHashTable<T> {
 				long prevElemPointer = INVALID_PREV_POINTER;
 				final int bucketOffset = j << this.bucketSizeBits;
 				long curElemPointer = seg.getLong(bucketOffset);
+				boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
 				while (curElemPointer != END_OF_LIST) {
-					curElemPointer = Math.abs(curElemPointer);
 					recordSegmentsInView.setReadPosition(curElemPointer);
-					final long nextElemPointer = recordSegmentsInView.readLong();
+					long nextElemPointer = recordSegmentsInView.readLong();
+					prevHadSizeGrowth = hadSizeGrowth;
+					hadSizeGrowth = nextElemPointer < 0;
+					nextElemPointer = Math.abs(nextElemPointer);
 					record = serializer.deserialize(record, recordSegmentsInView);
 
 					final int hashCode = hash(record);
@@ -328,14 +332,14 @@ public class ReduceHashTable<T> {
 						if (prevElemPointer == INVALID_PREV_POINTER) {
 							bucketSegments[bucketSegmentIndex].putLong(bucketOffset, nextElemPointer);
 						} else {
-							recordSegmentsOutView.overwriteLongAt(prevElemPointer, nextElemPointer);
+							recordSegmentsOutView.overwriteLongAt(prevElemPointer, prevHadSizeGrowth ? -nextElemPointer : nextElemPointer);
 						}
 
 						// Add to the beginning of the other list
 						final MemorySegment targetBucketSegment = newBucketSegments[i];
 						final long oldFirstElemOfTargetListPointer = targetBucketSegment.getLong(bucketOffset);
 						targetBucketSegment.putLong(bucketOffset, curElemPointer);
-						recordSegmentsOutView.overwriteLongAt(curElemPointer, oldFirstElemOfTargetListPointer);
+						recordSegmentsOutView.overwriteLongAt(curElemPointer, hadSizeGrowth ? -oldFirstElemOfTargetListPointer : oldFirstElemOfTargetListPointer);
 					}
 
 					prevElemPointer = curElemPointer;
@@ -356,9 +360,8 @@ public class ReduceHashTable<T> {
 			for (int j = 0; j < numBucketsPerSegment; j++) {
 				long curElemPointer = seg.getLong(j << this.bucketSizeBits);
 				while (curElemPointer != END_OF_LIST) {
-					curElemPointer = Math.abs(curElemPointer);
 					recordSegmentsInView.setReadPosition(curElemPointer);
-					curElemPointer = recordSegmentsInView.readLong();
+					curElemPointer = Math.abs(recordSegmentsInView.readLong());
 					reuse = serializer.deserialize(reuse, recordSegmentsInView);
 					outputCollector.collect(reuse);
 				}
