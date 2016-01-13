@@ -206,7 +206,9 @@ public class ReduceHashTable<T> {
 			hadSizeGrowth = currentPointer < 0;
 			currentPointer = Math.abs(currentPointer);
 
-			recordSegmentsInView.setReadPosition(currentPointer + RECORD_OFFSET_IN_LINK);
+			recordSegmentsInView.setReadPosition(currentPointer);
+			final long nextPointer = recordSegmentsInView.readLong();
+
 			currentRecordInList = this.serializer.deserialize(currentRecordInList, recordSegmentsInView);
 			if (this.comparator.equalToReference(currentRecordInList)) {
 				// we found an element with a matching key, and not just a hash collision
@@ -214,8 +216,7 @@ public class ReduceHashTable<T> {
 			}
 
 			prevPointer = currentPointer;
-			recordSegmentsInView.setReadPosition(currentPointer);
-			currentPointer = recordSegmentsInView.readLong();
+			currentPointer = nextPointer;
 		}
 
 		if (currentPointer == END_OF_LIST) {

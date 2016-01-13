@@ -31,9 +31,7 @@ import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.runtime.operators.testutils.UniformStringPairGenerator;
-import org.apache.flink.runtime.operators.testutils.types.StringPair;
-import org.apache.flink.runtime.operators.testutils.types.StringPairComparator;
-import org.apache.flink.runtime.operators.testutils.types.StringPairSerializer;
+import org.apache.flink.runtime.operators.testutils.types.*;
 import org.apache.flink.util.Collector;
 import org.junit.Test;
 
@@ -91,83 +89,76 @@ public class ReduceHashTableTest {
 	public void testWithIntPair() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
 
-		final int keySize = 100000;
-		final int valueSize = 10;
-		final int numRecords = 1000000;
+		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses)
+		final int valueRange = 10;
+		final int numRecords = 10000000;
 
-		@SuppressWarnings("unchecked")
-		TupleSerializer<Tuple2<Integer, Integer>> serializer =
-			new TupleSerializer<>((Class<Tuple2<Integer, Integer>>)((Class<?>)Tuple2.class),
-				new TypeSerializer[]{new IntSerializer(), new IntSerializer()});
-
-		TupleComparator<Tuple2<Integer, Integer>> comparator =
-			new TupleComparator<>(new int[]{0},
-				new TypeComparator[]{new IntComparator(true), new IntComparator(true)},
-				new TypeSerializer[]{new IntSerializer(), new IntSerializer()});
-
-		ReduceFunction<Tuple2<Integer, Integer>> reducer = new SumReducer();
+		final IntPairSerializer serializer = new IntPairSerializer();
+		final TypeComparator<IntPair> comparator = new IntPairComparator();
+		final ReduceFunction<IntPair> reducer = new SumReducer();
 
 		// Create the ReduceHashTableWithJavaHashMap, which will provide the correct output.
-		List<Tuple2<Integer, Integer>> expectedOutput = new ArrayList<>();
-		ReduceHashTableWithJavaHashMap<Tuple2<Integer, Integer>, Integer> reference = new ReduceHashTableWithJavaHashMap<>(
+		List<IntPair> expectedOutput = new ArrayList<>();
+		ReduceHashTableWithJavaHashMap<IntPair, Integer> reference = new ReduceHashTableWithJavaHashMap<>(
 			serializer, comparator, reducer, new CopyingListCollector<>(expectedOutput, serializer));
 
 		// Create the ReduceHashTable to test
-		final int numMemPages = keySize * 100 / PAGE_SIZE; // memory use should be proportional to the number of different keys
-		List<Tuple2<Integer, Integer>> actualOutput = new ArrayList<>();
-		ReduceHashTable<Tuple2<Integer, Integer>> table = new ReduceHashTable<>(
+		final int numMemPages = keyRange * 100 / PAGE_SIZE; // memory use should be proportional to the number of different keys
+		List<IntPair> actualOutput = new ArrayList<>();
+		ReduceHashTable<IntPair> table = new ReduceHashTable<>(
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
 
 		// Generate some input
-		List<Tuple2<Integer, Integer>> input = new ArrayList<>();
+		final List<IntPair> input = new ArrayList<>();
 		for(int i = 0; i < numRecords; i++) {
-			input.add(Tuple2.of(rnd.nextInt(keySize), rnd.nextInt(valueSize)));
+			input.add(new IntPair(rnd.nextInt(keyRange), rnd.nextInt(valueRange)));
 		}
 
-		//System.out.println("start"); //todo remove
-		//long start = System.currentTimeMillis();
+		System.out.println("start"); //todo remove
+		long start = System.currentTimeMillis();
 
 		// Process the generated input
 		final int numIntermingledEmits = 5;
-		for (Tuple2<Integer, Integer> record: input) {
-			reference.processRecord(serializer.copy(record), record.f0);
+		for (IntPair record: input) {
 			table.processRecord(serializer.copy(record));
-			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
-				// this will fire approx. numIntermingledEmits times
-				reference.emit();
-				table.emit();
-			}
+//			reference.processRecord(serializer.copy(record), record.getKey());
+//			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
+//				// this will fire approx. numIntermingledEmits times
+//				reference.emit();
+//				table.emit();
+//			}
 		}
-		reference.emit();
-		table.emit();
+//		reference.emit();
+//		table.emit();
 
-//		long end = System.currentTimeMillis();
-//		System.out.println("stop, time: " + (end - start)); //todo remove
+		long end = System.currentTimeMillis();
+		System.out.println("stop, time: " + (end - start)); //todo remove
 
 		// Check results
 
 		assertEquals(expectedOutput.size(), actualOutput.size());
 
 		ArrayList<Integer> expectedValues = new ArrayList<>();
-		for (Tuple2<Integer, Integer> record: expectedOutput) {
-			expectedValues.add(record.f1);
+		for (IntPair record: expectedOutput) {
+			expectedValues.add(record.getValue());
 		}
 		ArrayList<Integer> actualValues = new ArrayList<>();
-		for (Tuple2<Integer, Integer> record: actualOutput) {
-			actualValues.add(record.f1);
+		for (IntPair record: actualOutput) {
+			actualValues.add(record.getValue());
 		}
 		expectedValues.sort(Ordering.<Integer>natural());
 		actualValues.sort(Ordering.<Integer>natural());
 		assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
 	}
 
-	class SumReducer implements ReduceFunction<Tuple2<Integer, Integer>> {
+	class SumReducer implements ReduceFunction<IntPair> {
 		@Override
-		public Tuple2<Integer, Integer> reduce(Tuple2<Integer, Integer> a, Tuple2<Integer, Integer> b) throws Exception {
-			if (a.f0.compareTo(b.f0) != 0) {
+		public IntPair reduce(IntPair a, IntPair b) throws Exception {
+			if (a.getKey() != b.getKey()) {
 				throw new RuntimeException("SumReducer was called with two record that have differing keys.");
 			}
-			return Tuple2.of(a.f0, a.f1 + b.f1);
+			a.setValue(a.getValue() + b.getValue());
+			return a;
 		}
 	}
 

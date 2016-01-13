@@ -44,7 +44,7 @@ public class HashTablePerformanceComparison {
 		
 	private static final int PAGE_SIZE = 16 * 1024;
 	
-	private final int NUM_PAIRS = 20000000;
+	private final int NUM_PAIRS = 10000000; ////20000000;
 	
 	private final int SIZE = 36;
 		
