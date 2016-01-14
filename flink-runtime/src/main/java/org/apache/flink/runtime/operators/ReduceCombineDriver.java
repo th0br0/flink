@@ -206,7 +206,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 					while (running && (value = in.next(value)) != null) {
 
 						// try writing to the hash table first
-						if (this.table.processRecord(value)) {
+						if (this.table.processRecordWithReduce(value)) {
 							continue;
 						}
 
@@ -214,7 +214,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 						table.emit();
 
 						// write the value again
-						if (!this.table.processRecord(value)) {
+						if (!this.table.processRecordWithReduce(value)) {
 							throw new IOException("Cannot write record to fresh hash table.");
 						}
 					}
@@ -223,7 +223,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 					while (running && (value = in.next()) != null) {
 
 						// try writing to the hash table first
-						if (this.table.processRecord(value)) {
+						if (this.table.processRecordWithReduce(value)) {
 							continue;
 						}
 
@@ -231,7 +231,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 						table.emit();
 
 						// write the value again
-						if (!this.table.processRecord(value)) {
+						if (!this.table.processRecordWithReduce(value)) {
 							throw new IOException("Cannot write record to fresh hash table.");
 						}
 					}

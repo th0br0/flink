@@ -19,7 +19,9 @@
 package org.apache.flink.runtime.operators.hash;
 
 import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.typeutils.SameTypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeComparator;
+import org.apache.flink.api.common.typeutils.TypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.MemorySegment;
@@ -111,6 +113,8 @@ public class ReduceHashTable<T> {
 
 	private T reuse;
 
+	private HashTableProber<T> prober;
+
 
 	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, ReduceFunction<T> reducer,
 						List<MemorySegment> memory, Collector<T> outputCollector, boolean objectReuseEnabled) {
@@ -155,6 +159,7 @@ public class ReduceHashTable<T> {
 		stagingSegmentsOutView = new StagingOutputView(stagingSegments, this.segmentSize);
 
 		reuse = serializer.createInstance();
+		prober = new HashTableProber<>(comparator, new SameTypePairComparator<>(comparator));
 	}
 
 	private void initBucketSegments(MemorySegment[] segments) {
@@ -176,117 +181,84 @@ public class ReduceHashTable<T> {
 		}
 	}
 
-	private int hash(T record) {
-		return Math.abs(this.comparator.hash(record));
+	//todo: comment, es vegiggondolni, hogy kell-e egyaltalan ez; most csak azert raktam be, hogy performance comparsion fair legyen,
+	// mert a HashTablePerformanceComparison-ben egymas utan jonnek a kulcsok
+	private static int hash(int code) {
+		code = (code + 0x7ed55d16) + (code << 12);
+		code = (code ^ 0xc761c23c) ^ (code >>> 19);
+		code = (code + 0x165667b1) + (code << 5);
+		code = (code + 0xd3a2646c) ^ (code << 9);
+		code = (code + 0xfd7046c5) + (code << 3);
+		code = (code ^ 0xb55a4f09) ^ (code >>> 16);
+		return code >= 0 ? code : -(code + 1);
+
+//		return Math.abs(code);
 	}
 
 	/**
 	 * Searches the hash table for the record with matching key, and updates it (makes one reduce step) if found,
 	 * otherwise inserts a new entry.
 	 *
+	 * (If there are multiple entries with the same key, then it will update one of them.)
+	 *
 	 * @param record The record to be processed.
 	 * @return A boolean that signals whether the operation succeded, or we have run out of memory.
 	 */
-	public boolean processRecord(T record) throws Exception {
-		final int hashCode = hash(record);
-		final int bucket = hashCode % this.numBuckets;
-		final int bucketSegmentIndex = bucket >>> this.numBucketsPerSegmentBits; // which segment contains the bucket
-		final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
-		final int bucketOffset = (bucket & this.numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
-
-		long currentPointer = bucketSegment.getLong(bucketOffset);
-
-		this.comparator.setReference(record);
-
-		T currentRecordInList = this.reuse;
-
-		boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
-		long prevPointer = INVALID_PREV_POINTER;
-		long nextPointer = END_OF_LIST; // (this initial value is actually unused)
-		while (currentPointer != END_OF_LIST) {
-			recordSegmentsInView.setReadPosition(currentPointer);
-			nextPointer = recordSegmentsInView.readLong();
-			// the sign bit of nextPointer stores whether we had a record size change at this key before
-			prevHadSizeGrowth = hadSizeGrowth;
-			hadSizeGrowth = nextPointer < 0;
-			nextPointer = Math.abs(nextPointer);
-
-			currentRecordInList = this.serializer.deserialize(currentRecordInList, recordSegmentsInView);
-			if (this.comparator.equalToReference(currentRecordInList)) {
-				// we found an element with a matching key, and not just a hash collision
-				break;
-			}
-
-			prevPointer = currentPointer;
-			currentPointer = nextPointer;
-		}
-
-		if (currentPointer == END_OF_LIST) {
-			// linked list doesn't contain the key, append
-
-			//todo: szamolni a load factort, es resizeTable
-
-			// create new link
-			long pointerToAppended;
-			try {
-				pointerToAppended = recordSegmentsOutView.appendNilPointerAndRecord(record);
-			} catch (EOFException ex) {
-				return false; // we have run out of memory
-			}
-
-			// add new link to the list
-			if (prevPointer == INVALID_PREV_POINTER) {
-				// list was empty
-				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
-			} else {
-				recordSegmentsOutView.overwriteLongAt(prevPointer, hadSizeGrowth ? -pointerToAppended : pointerToAppended);
-			}
+	public boolean processRecordWithReduce(T record) throws Exception {
+		T match = prober.getMatchFor(record, reuse);
+		if (match == null) {
+			return prober.insertAfterNoMatch(record);
 		} else {
-			// linked list contains the key
-
 			// do the reduce step
-			T res = reducer.reduce(currentRecordInList, record);
-
-			// determine the new size
-			stagingSegmentsOutView.reset();
-			serializer.serialize(res, stagingSegmentsOutView);
-			final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
-			stagingSegmentsInView.setReadPosition(0);
-
-			// Determine the size of the place of the old record.
-			// Note, that if we had a size growth before, then the size will have been rounded up to the nearest
-			// power of 2.
-			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
-			final int oldRecordPlaceSize = hadSizeGrowth ? MathUtils.roundUpToPowerOf2(oldRecordSize) : oldRecordSize;
-
-			if (newRecordSize <= oldRecordPlaceSize) {
-				// overwrite record at its original place
-				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
-				// note: sign of next pointer in previous link is OK, no need to modify it
-			} else {
-				// new record doesn't fit in place of old, append new at end of recordSegments.
-
-				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
-				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(-Math.abs(nextPointer), stagingSegmentsInView,
-						newRecordSize, MathUtils.roundUpToPowerOf2(newRecordSize) - newRecordSize);
-
-				// modify the pointer in the previous link
-				if (prevPointer == INVALID_PREV_POINTER) {
-					// list had only one element, so prev is in the bucketSegments
-					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
-				} else {
-					recordSegmentsOutView.overwriteLongAt(prevPointer, prevHadSizeGrowth ? -pointerToAppended : pointerToAppended);
-				}
-			}
+			T res = reducer.reduce(match, record);
 
 			// We have given this.reuse to the reducer UDF, so create new one if object reuse is disabled
 			if (!objectReuseEnabled) {
 				this.reuse = serializer.createInstance();
 			}
-		}
 
-		return true;
+			try {
+				prober.updateMatch(res);
+			} catch (IOException ex) {
+				// We have run out of memory
+				return false;
+			}
+			return true;
+		}
+	}
+
+	/**
+	 * Searches the hash table for a record with the given key.
+	 * If it is found, then it is overridden by the specified record.
+	 * Otherwise, the specified record is inserted.
+	 * @param record The record to insert or to replace with.
+	 * @throws IOException
+     */
+	public void insertOrReplaceRecord(T record) throws IOException {
+		T match = prober.getMatchFor(record, reuse);
+		if (match == null) {
+			prober.insertAfterNoMatch(record);
+		} else {
+			prober.updateMatch(record);
+		}
+	}
+
+	/**
+	 * Inserts the given record into the hash table.
+	 * Note: this method doesn't care about whether a record with the same key is already present.
+	 * @param record The record to insert.
+	 * @throws IOException
+     */
+	public void insert(T record) throws IOException {
+		final int hashCode = hash(comparator.hash(record));
+		final int bucket = hashCode % numBuckets;
+		final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+		final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
+		final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+		final long firstPointer = bucketSegment.getLong(bucketOffset);
+
+		final long newFirstPointer = recordSegmentsOutView.appendPointerAndRecord(firstPointer, record);
+		bucketSegment.putLong(bucketOffset, newFirstPointer);
 	}
 
 	/**
@@ -309,7 +281,7 @@ public class ReduceHashTable<T> {
 			MemorySegment seg = bucketSegments[i];
 			for (int j = 0; j < numBucketsPerSegment; j++) {
 				long prevElemPointer = INVALID_PREV_POINTER;
-				final int bucketOffset = j << this.bucketSizeBits;
+				final int bucketOffset = j << bucketSizeBits;
 				long curElemPointer = seg.getLong(bucketOffset);
 				boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
 				while (curElemPointer != END_OF_LIST) {
@@ -320,7 +292,7 @@ public class ReduceHashTable<T> {
 					nextElemPointer = Math.abs(nextElemPointer);
 					record = serializer.deserialize(record, recordSegmentsInView);
 
-					final int hashCode = hash(record);
+					final int hashCode = hash(this.comparator.hash(record));
 					final int bucket = hashCode % this.numBuckets; // (numBuckets is the new number of buckets here)
 					final int bucketSegmentIndex = bucket >>> this.numBucketsPerSegmentBits; // which segment should contain the bucket
 					if (bucketSegmentIndex != j) {
@@ -354,11 +326,13 @@ public class ReduceHashTable<T> {
 	 */
 	public void emit() throws IOException {
 
+		//todo: ezt is a trukkos bejarassal kene, amit a compaction-nel csinalunk
+
 		// go through all buckets and all linked lists, and emit all current partial aggregates
 		for (int i = 0; i < bucketSegments.length; i++) {
 			MemorySegment seg = bucketSegments[i];
 			for (int j = 0; j < numBucketsPerSegment; j++) {
-				long curElemPointer = seg.getLong(j << this.bucketSizeBits);
+				long curElemPointer = seg.getLong(j << bucketSizeBits);
 				while (curElemPointer != END_OF_LIST) {
 					recordSegmentsInView.setReadPosition(curElemPointer);
 					curElemPointer = Math.abs(recordSegmentsInView.readLong());
@@ -391,7 +365,7 @@ public class ReduceHashTable<T> {
 	 *  - can write a record to an arbitrary position (WARNING: the new record must not be larger than the old one)
 	 *  - can append a record (with a specified pointer before it)
 	 *  - takes memory from ReduceHashTable.freeMemory on append
-	 * Warning: Do not call the write* methods of AbstractPagedOutputView directly, because lastPosition has to be
+	 * WARNING: Do not call the write* methods of AbstractPagedOutputView directly, because lastPosition has to be
 	 * modified when appending data.
 	 */
 	public class AppendableRandomAccessOutputView extends AbstractPagedOutputView
@@ -518,21 +492,32 @@ public class ReduceHashTable<T> {
 		}
 
 		/**
+		 * Appends a pointer and a record.
+		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
+		 * @param record The record to write
+		 * @return A pointer to the written data
+		 * @throws IOException
+		 */
+		public long appendPointerAndRecord(long pointer, T record) throws IOException {
+			setWritePosition(lastPosition);
+			final long oldLastPosition = lastPosition;
+			final long oldPositionInSegment = getCurrentPositionInSegment();
+			final long oldSegmentIndex = currentSegmentIndex;
+			writeLong(pointer);
+			serializer.serialize(record, this);
+			lastPosition += getCurrentPositionInSegment() - oldPositionInSegment +
+				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
+			return oldLastPosition;
+		}
+
+		/**
 		 * Appends an END_OF_LIST pointer and a record.
 		 * @param record The record to write
 		 * @return A pointer to the written data
 		 * @throws IOException
 		 */
 		public long appendNilPointerAndRecord(T record) throws IOException {
-			setWritePosition(lastPosition);
-			final long oldLastPosition = lastPosition;
-			final long oldPositionInSegment = getCurrentPositionInSegment();
-			final long oldSegmentIndex = currentSegmentIndex;
-			writeLong(END_OF_LIST);
-			serializer.serialize(record, this);
-			lastPosition += getCurrentPositionInSegment() - oldPositionInSegment +
-				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
-			return oldLastPosition;
+			return appendPointerAndRecord(END_OF_LIST, record);
 		}
 	}
 
@@ -577,4 +562,150 @@ public class ReduceHashTable<T> {
 		}
 	}
 
+
+	public <PT> HashTableProber<PT> getProber(TypeComparator<PT> probeTypeComparator, TypePairComparator<PT, T> pairComparator) {
+		return new HashTableProber<>(probeTypeComparator, pairComparator);
+	}
+
+	public final class HashTableProber<PT> extends AbstractHashTableProber<PT, T>{
+
+		public HashTableProber(TypeComparator<PT> probeTypeComparator, TypePairComparator<PT, T> pairComparator) {
+			super(probeTypeComparator, pairComparator);
+		}
+
+		private long prevPointer;
+		private boolean prevHadSizeGrowth;
+		private long nextPointer;
+		private int bucketSegmentIndex;
+		private int bucketOffset;
+		private boolean hadSizeGrowth;
+		private long currentPointer;
+
+		//todo: comment
+		//beleirni, hogy ha tobb azonos kulcsu van, akkor egyet ad csak vissza
+		/**
+		 *
+		 * @param record
+		 * @param targetForMatch
+         * @return
+         */
+		@Override
+		public T getMatchFor(PT record, T targetForMatch) {
+			final int hashCode = hash(probeTypeComparator.hash(record));
+			final int bucket = hashCode % numBuckets;
+			bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+			final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
+			bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+
+			currentPointer = bucketSegment.getLong(bucketOffset);
+
+			pairComparator.setReference(record);
+
+			T currentRecordInList = targetForMatch;
+
+			prevPointer = INVALID_PREV_POINTER;
+			try {
+				while (currentPointer != END_OF_LIST) {
+					recordSegmentsInView.setReadPosition(currentPointer);
+					nextPointer = recordSegmentsInView.readLong();
+					// the sign bit of nextPointer stores whether we had a record size change at this key before
+					prevHadSizeGrowth = hadSizeGrowth;
+					hadSizeGrowth = nextPointer < 0;
+					nextPointer = Math.abs(nextPointer);
+
+					currentRecordInList = serializer.deserialize(currentRecordInList, recordSegmentsInView);
+					if (pairComparator.equalToReference(currentRecordInList)) {
+						// we found an element with a matching key, and not just a hash collision
+						return currentRecordInList;
+					}
+
+					prevPointer = currentPointer;
+					currentPointer = nextPointer;
+				}
+			} catch (IOException ex) {
+				throw new RuntimeException("Bug in ReduceHashTable", ex);
+			}
+			return null;
+		}
+
+		/**
+		 * This method can be called after getMatchFor returned a match.
+		 * It will overwrite the record that was found by getMatchFor.
+		 * Warning: The new record should have the same key as the old!
+		 * @param newRecord The record to override the old record with.
+		 * @throws IOException
+         */
+		@Override
+		public void updateMatch(T newRecord) throws IOException {
+			if (currentPointer == END_OF_LIST) {
+				throw new RuntimeException("updateMatch was called after getMatchFor returned no match");
+			}
+
+			// determine the new size
+			stagingSegmentsOutView.reset();
+			serializer.serialize(newRecord, stagingSegmentsOutView);
+			final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
+			stagingSegmentsInView.setReadPosition(0);
+
+			// Determine the size of the place of the old record.
+			// Note, that if we had a size growth before, then the size will have been rounded up to the nearest
+			// power of 2.
+			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
+			final int oldRecordPlaceSize = hadSizeGrowth ? MathUtils.roundUpToPowerOf2(oldRecordSize) : oldRecordSize;
+
+			if (newRecordSize <= oldRecordPlaceSize) {
+				// overwrite record at its original place
+				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
+				// note: sign of next pointer in previous link is OK, no need to modify it
+			} else {
+				// new record doesn't fit in place of old, append new at end of recordSegments.
+
+				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
+				final long pointerToAppended =
+					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(-Math.abs(nextPointer), stagingSegmentsInView,
+						newRecordSize, MathUtils.roundUpToPowerOf2(newRecordSize) - newRecordSize);
+
+				// modify the pointer in the previous link
+				if (prevPointer == INVALID_PREV_POINTER) {
+					// list had only one element, so prev is in the bucketSegments
+					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
+				} else {
+					recordSegmentsOutView.overwriteLongAt(prevPointer, prevHadSizeGrowth ? -pointerToAppended : pointerToAppended);
+				}
+			}
+		}
+
+		/**
+		 * This method can be called after getMatchFor returned null.
+		 * It inserts the given record to the hash table.
+		 * Important: The given record should have the same key as the record that was given to getMatchFor!
+		 */
+		public boolean insertAfterNoMatch(T record) throws IOException {
+			if (currentPointer == END_OF_LIST) {
+				throw new RuntimeException("insertAfterNoMatch was called after getMatchFor returned no match");
+			}
+
+			//todo: szamolni a load factort, es resizeTable
+
+			// create new link
+			long pointerToAppended;
+			try {
+				pointerToAppended = recordSegmentsOutView.appendNilPointerAndRecord(record);
+			} catch (EOFException ex) {
+				return false; // we have run out of memory
+			}
+
+			// add new link to the end of the list
+			if (prevPointer == INVALID_PREV_POINTER) {
+				// list was empty
+				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
+			} else {
+				// update the pointer of the last element of the list.
+				// (we need to use hadSizeGrowth instead of prevHadSizeGrowth)
+				recordSegmentsOutView.overwriteLongAt(prevPointer, hadSizeGrowth ? -pointerToAppended : pointerToAppended);
+			}
+
+			return true;
+		}
+	}
 }
