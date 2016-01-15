@@ -44,9 +44,7 @@ import java.util.List;
 //todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
 
 //todo: olyan teszt is kell, amikor nem adok neki eleg memoriat
-
-//todo: vegig kene gondolni, hogy mikor dobunk exception-t, es mikor return value-val jelezzuk a memoria megteltet
-
+//todo: memoria megteles kori exceptionoket/return value-kat atgondolni
 //todo: compaction, ha kifogytunk a memoriabol
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
@@ -97,11 +95,6 @@ public class ReduceHashTable<T> {
 	private final int numAllMemorySegments;
 
 	/**
-	 * The size of the provided memoroy segments.
-	 */
-	private final int segmentSize, segmentSizeBits;
-
-	/**
 	 * These will contain the buckets.
 	 * The buckets contain a pointer to the linked lists containing the actual records.
 	 */
@@ -109,7 +102,8 @@ public class ReduceHashTable<T> {
 
 	private static final int bucketSize = 8, bucketSizeBits = 3;
 
-	private int numBuckets; //todo: vigyazat, nehogy valami baj legyen abbol, hogy ez int! (azert int, hogy gyorsabb legyen a maradekos osztas)
+	private int numBuckets;
+	private int numBucketsMask;
 	private final int numBucketsPerSegment, numBucketsPerSegmentBits, numBucketsPerSegmentMask;
 
 	/**
@@ -134,6 +128,9 @@ public class ReduceHashTable<T> {
 
 	private final HashTableProber<T> prober;
 
+	//todo: comment
+	private boolean enableResize = false;
+
 
 	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, ReduceFunction<T> reducer,
 						List<MemorySegment> memory, Collector<T> outputCollector, boolean objectReuseEnabled) {
@@ -151,30 +148,28 @@ public class ReduceHashTable<T> {
 				MIN_NUM_MEMORY_SEGMENTS + " memory segments.");
 		}
 
-		// check the size of the first buffer and record it. all further buffers must have the same size.
+		// Get the size of the first memory segment and record it. All further buffers must have the same size.
 		// the size must also be a power of 2
-		this.segmentSize = freeMemorySegments.get(0).size();
-		if ( (this.segmentSize & this.segmentSize - 1) != 0) {
+		final int segmentSize = freeMemorySegments.get(0).size();
+		if ( (segmentSize & segmentSize - 1) != 0) {
 			throw new IllegalArgumentException("Hash Table requires buffers whose size is a power of 2.");
 		}
-		this.segmentSizeBits = MathUtils.log2strict(this.segmentSize);
 
 		this.numBucketsPerSegment = segmentSize / bucketSize;
 		this.numBucketsPerSegmentBits = MathUtils.log2strict(this.numBucketsPerSegment);
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
 
-		//todo: Maybe calculate fraction from record size (and maybe make size a power of 2, to have faster divisions?)
 		resetBucketSegments(calcInitialNumBucketSegments());
 
 		ArrayList<MemorySegment> recordSegments = new ArrayList<>();
-		recordSegments.add(allocateSegment()); //todo: esetleg mashogy megoldani, hogy ne durranjon el a konstruktor
-		recordSegmentsInView = new RandomAccessInputView(recordSegments, this.segmentSize);
-		recordSegmentsOutView = new AppendableRandomAccessOutputView(recordSegments, this.segmentSize);
+		recordSegments.add(allocateSegment());
+		recordSegmentsInView = new RandomAccessInputView(recordSegments, segmentSize);
+		recordSegmentsOutView = new AppendableRandomAccessOutputView(recordSegments, segmentSize);
 
 		stagingSegments = new ArrayList<>();
 		stagingSegments.add(allocateSegment());
-		stagingSegmentsInView = new RandomAccessInputView(stagingSegments, this.segmentSize);
-		stagingSegmentsOutView = new StagingOutputView(stagingSegments, this.segmentSize);
+		stagingSegmentsInView = new RandomAccessInputView(stagingSegments, segmentSize);
+		stagingSegmentsOutView = new StagingOutputView(stagingSegments, segmentSize);
 
 		reuse = serializer.createInstance();
 		prober = new HashTableProber<>(comparator, new SameTypePairComparator<>(comparator));
@@ -187,10 +182,19 @@ public class ReduceHashTable<T> {
 			// It seems that resizing is quite efficient, so we can err here on the too few bucket segments side.
 			// Even with small records, we lose only ~15% speed.
 			fraction = 0.1;
+			enableResize = true;
 		} else {
 			fraction = 8.0 / (16 + recordLength);
+			enableResize = false;
 		}
-		return Math.max(1, (int)(numAllMemorySegments * fraction));
+
+		int ret = Math.max(1, MathUtils.roundDownToPowerOf2((int)(numAllMemorySegments * fraction)));
+
+		// We can't handle more than Integer.MAX_VALUE buckets (eg. because hash functions return ints)
+		if ((long)ret * numBucketsPerSegment > Integer.MAX_VALUE) {
+			ret = MathUtils.roundDownToPowerOf2(Integer.MAX_VALUE / numBucketsPerSegment);
+		}
+		return ret;
 	}
 
 	private void resetBucketSegments(int numBucketSegments) {
@@ -202,9 +206,6 @@ public class ReduceHashTable<T> {
 			freeMemorySegments.addAll(Arrays.asList(bucketSegments));
 		}
 
-		if (numBuckets % numBucketsPerSegment != 0) {
-			throw new RuntimeException("Bug in ReduceHashTable");
-		}
 		bucketSegments = new MemorySegment[numBucketSegments];
 		for(int i = 0; i < bucketSegments.length; i++) {
 			bucketSegments[i] = allocateSegment();
@@ -214,6 +215,7 @@ public class ReduceHashTable<T> {
 			}
 		}
 		numBuckets = numBucketSegments * numBucketsPerSegment;
+		numBucketsMask = (1 << MathUtils.log2strict(numBuckets)) - 1;
 	}
 
 	private MemorySegment allocateSegment() {
@@ -225,9 +227,11 @@ public class ReduceHashTable<T> {
 		}
 	}
 
-	//todo: comment, es vegiggondolni, hogy kell-e egyaltalan ez; most csak azert raktam be, hogy performance a comparison fair legyen,
-	// mert a HashTablePerformanceComparison-ben egymas utan jonnek a kulcsok
 	private static int hash(int code) {
+		//todo: comment, es vegiggondolni, hogy kell-e egyaltalan ez; most csak azert raktam be, hogy a performance a comparison fair legyen,
+		// mert a HashTablePerformanceComparison-ben egymas utan jonnek a kulcsok
+		// A vegso valtozatban itt eleg lesz egyszeruen abszoluterteket venni, csak ahhoz akkor majd at kell irni a
+		// HashTablePerformanceComparison-t valahogy.
 		code = (code + 0x7ed55d16) + (code << 12);
 		code = (code ^ 0xc761c23c) ^ (code >>> 19);
 		code = (code + 0x165667b1) + (code << 5);
@@ -295,7 +299,7 @@ public class ReduceHashTable<T> {
      */
 	public void insert(T record) throws IOException {
 		final int hashCode = hash(comparator.hash(record));
-		final int bucket = hashCode % numBuckets;
+		final int bucket = hashCode & numBucketsMask;
 		final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 		final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
 		final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
@@ -309,9 +313,13 @@ public class ReduceHashTable<T> {
 	}
 
 	private void resizeTableIfNecessary() {
-		if (numElements > numBuckets) {
+		if (enableResize && numElements > numBuckets) {
 			final long newNumBucketSegments = 2L * bucketSegments.length;
-			if (newNumBucketSegments < Integer.MAX_VALUE &&
+			// Checks:
+			// - we can't handle more than Integer.MAX_VALUE buckets
+			// - don't take more memory than the free memory we have left
+			// - the buckets shouldn't occupy more than half of all our memory
+			if (newNumBucketSegments * numBucketsPerSegment < Integer.MAX_VALUE &&
 				newNumBucketSegments - bucketSegments.length < freeMemorySegments.size() &&
 				newNumBucketSegments < numAllMemorySegments / 2)
 			resizeTable((int)newNumBucketSegments);
@@ -345,7 +353,7 @@ public class ReduceHashTable<T> {
 					// Insert into table
 
 					final int hashCode = hash(comparator.hash(record));
-					final int bucket = hashCode % numBuckets;
+					final int bucket = hashCode & numBucketsMask;
 					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 					final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
 					final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
@@ -641,7 +649,7 @@ public class ReduceHashTable<T> {
 		@Override
 		public T getMatchFor(PT record, T targetForMatch) {
 			final int hashCode = hash(probeTypeComparator.hash(record));
-			final int bucket = hashCode % numBuckets;
+			final int bucket = hashCode & numBucketsMask;
 			bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 			final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
 			bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
@@ -702,9 +710,6 @@ public class ReduceHashTable<T> {
 				// new record has a different size than the old one, append new at end of recordSegments.
 				// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know the size of this
 				// place during the compaction, and wouldn't know where does the next record start.
-
-				//todo: ha megcsinalom a compaction-t, akkor itt kell majd valami jelzes a regi pointer helyere, hogy ez egy ures hely!
-				// az ures hely meretet onnan tudom, hogy deserializalom, ami ott volt
 
 				final long pointerToAppended =
 					recordSegmentsOutView.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
