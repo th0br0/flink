@@ -38,9 +38,11 @@ import java.util.List;
 /**
  * todo: comment on hash table structure
  *
- * (beleirni, hogy ha csokkent eg yrecord merete, akkor elvesztjuk az infot az eredeti meretrol, vagyis ha visszano,
+ * (beleirni, hogy ha csokkent egy record merete, akkor elvesztjuk az infot az eredeti meretrol, vagyis ha visszano,
  * akkor uj helyet fogunk foglalni)
  */
+
+//todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> {
@@ -53,7 +55,7 @@ public class ReduceHashTable<T> {
 	/**
 	 * The next pointer of the last link in the linked lists will have this as next pointer.
 	 */
-	private static final long END_OF_LIST = 1L<<62; // warning: because of the sign bit trickery, this can't be 0 or negative
+	private static final long END_OF_LIST = 1L<<62; // warning: because of the sign bit trickery, this can't be 0 or negative //todo: update comment
 
 	/**
 	 * This value means that the prevPointer is "pointing to the bucket", and not into the record segments.
@@ -92,7 +94,7 @@ public class ReduceHashTable<T> {
 
 	private static final int bucketSize = 8, bucketSizeBits = 3;
 
-	private int numBuckets;
+	private int numBuckets; //todo: vigyazat, nehogy valami baj legyen abbol, hogy ez int! (azert int, hogy gyorsabb legyen a maradekos osztas)
 	private final int numBucketsPerSegment, numBucketsPerSegmentBits, numBucketsPerSegmentMask;
 
 	/**
@@ -110,6 +112,8 @@ public class ReduceHashTable<T> {
 	private final ArrayList<MemorySegment> stagingSegments;
 	private final RandomAccessInputView stagingSegmentsInView;
 	private final StagingOutputView stagingSegmentsOutView;
+
+	private long numElements = 0;
 
 	private T reuse;
 
@@ -144,7 +148,7 @@ public class ReduceHashTable<T> {
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
 
 		//todo: Calculate fraction from record size (and maybe make size a power of 2, to have faster divisions?)
-		bucketSegments = new MemorySegment[freeMemory.size() / 2];
+		bucketSegments = new MemorySegment[freeMemory.size() / 4];
 		initBucketSegments(bucketSegments);
 		this.numBuckets = bucketSegments.length * this.numBucketsPerSegment;
 
@@ -207,7 +211,7 @@ public class ReduceHashTable<T> {
 	public boolean processRecordWithReduce(T record) throws Exception {
 		T match = prober.getMatchFor(record, reuse);
 		if (match == null) {
-			return prober.insertAfterNoMatch(record);
+			return prober.insertAfterNoMatch(record); //todo: ez igy nem biztos, hogy jo, mert lehet, hogy exception-t dob, amit a hivo hogy is ertelmez? egysegesiteni kene, hogy mikor dobunk exception-t, es mikor return value-val jelezzuk a memoria megteltet
 		} else {
 			// do the reduce step
 			T res = reducer.reduce(match, record);
@@ -250,6 +254,11 @@ public class ReduceHashTable<T> {
 	 * @throws IOException
      */
 	public void insert(T record) throws IOException {
+//		//todo
+//		if (numElements > numBuckets) {
+//			resizeTable();
+//		}
+
 		final int hashCode = hash(comparator.hash(record));
 		final int bucket = hashCode % numBuckets;
 		final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
@@ -259,67 +268,79 @@ public class ReduceHashTable<T> {
 
 		final long newFirstPointer = recordSegmentsOutView.appendPointerAndRecord(firstPointer, record);
 		bucketSegment.putLong(bucketOffset, newFirstPointer);
+		numElements++;
 	}
 
-	/**
-	 * Doubles the table size (the number of buckets)
-	 */
-	private void resizeTable() throws IOException {
-		// We allocate a new array of bucket segments, that has the same size as the old,
-		// move some of the records to the new segments, and then concatenate the two arrays.
-
-		// vagy lehet, hogy ezt olyan vegigmenessel jobb lenne, mint amit a compact csinal?
-		//	 nem tudom, hogy gyorsabb lenne-e, de talan tobb code reuse lehetne ugy
-
-		MemorySegment[] newBucketSegments = new MemorySegment[this.bucketSegments.length];
-		initBucketSegments(newBucketSegments);
-
-		this.numBuckets *= 2;
-
-		T record = reuse;
-		for (int i = 0; i < bucketSegments.length; i++) {
-			MemorySegment seg = bucketSegments[i];
-			for (int j = 0; j < numBucketsPerSegment; j++) {
-				long prevElemPointer = INVALID_PREV_POINTER;
-				final int bucketOffset = j << bucketSizeBits;
-				long curElemPointer = seg.getLong(bucketOffset);
-				boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
-				while (curElemPointer != END_OF_LIST) {
-					recordSegmentsInView.setReadPosition(curElemPointer);
-					long nextElemPointer = recordSegmentsInView.readLong();
-					prevHadSizeGrowth = hadSizeGrowth;
-					hadSizeGrowth = nextElemPointer < 0;
-					nextElemPointer = Math.abs(nextElemPointer);
-					record = serializer.deserialize(record, recordSegmentsInView);
-
-					final int hashCode = hash(this.comparator.hash(record));
-					final int bucket = hashCode % this.numBuckets; // (numBuckets is the new number of buckets here)
-					final int bucketSegmentIndex = bucket >>> this.numBucketsPerSegmentBits; // which segment should contain the bucket
-					if (bucketSegmentIndex != j) {
-						// Move link to the linked list of the new bucket.
-						// Note, that since we doubled the number of buckets, the target index into newBucketSegments
-						// is the same as the old index into bucketSegments.
-
-						// Remove from old linked list
-						if (prevElemPointer == INVALID_PREV_POINTER) {
-							bucketSegments[bucketSegmentIndex].putLong(bucketOffset, nextElemPointer);
-						} else {
-							recordSegmentsOutView.overwriteLongAt(prevElemPointer, prevHadSizeGrowth ? -nextElemPointer : nextElemPointer);
-						}
-
-						// Add to the beginning of the other list
-						final MemorySegment targetBucketSegment = newBucketSegments[i];
-						final long oldFirstElemOfTargetListPointer = targetBucketSegment.getLong(bucketOffset);
-						targetBucketSegment.putLong(bucketOffset, curElemPointer);
-						recordSegmentsOutView.overwriteLongAt(curElemPointer, hadSizeGrowth ? -oldFirstElemOfTargetListPointer : oldFirstElemOfTargetListPointer);
-					}
-
-					prevElemPointer = curElemPointer;
-					curElemPointer = nextElemPointer;
-				}
-			}
-		}
-	}
+	// todo: egyelore bugos
+	// ujra kene irni a compactos vegigmenessel
+	//   lehet, hogy ez egyszeru lesz, mert kb. annyi, hogy kidobom a regi bucketeket, initelek ujakat (ketszer annyit), es aztan meghivom a compact belsejet,
+	//   ami vegigmegy a recordsegmenteken, es beszur mindent
+//	/**
+//	 * Doubles the number of buckets
+//	 */
+//	private void resizeTable() throws IOException {
+//		// We allocate a new array of bucket segments, that has the same size as the old,
+//		// move some of the records to the new segments, and then concatenate the two arrays.
+//
+//		// vagy lehet, hogy ezt olyan vegigmenessel jobb lenne, mint amit a compact csinal?
+//		//	 nem tudom, hogy gyorsabb lenne-e, de talan tobb code reuse lehetne ugy
+//
+//		MemorySegment[] newBucketSegments = new MemorySegment[bucketSegments.length];
+//		initBucketSegments(newBucketSegments);
+//
+//		numBuckets *= 2;
+//
+//		T record = reuse;
+//		for (int i = 0; i < bucketSegments.length; i++) {
+//			MemorySegment seg = bucketSegments[i];
+//			for (int j = 0; j < numBucketsPerSegment; j++) {
+//				long prevElemPointer = INVALID_PREV_POINTER;
+//				final int bucketOffset = j << bucketSizeBits;
+//				long curElemPointer = seg.getLong(bucketOffset);
+//				boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
+//				while (curElemPointer != END_OF_LIST) {
+//					recordSegmentsInView.setReadPosition(curElemPointer);
+//					long nextElemPointer = recordSegmentsInView.readLong();
+//					prevHadSizeGrowth = hadSizeGrowth;
+//					hadSizeGrowth = nextElemPointer < 0;
+//					nextElemPointer = Math.abs(nextElemPointer);
+//					record = serializer.deserialize(record, recordSegmentsInView);
+//
+//					final int hashCode = hash(comparator.hash(record));
+//					final int bucket = hashCode % numBuckets; // (numBuckets is the new number of buckets here)
+//					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment should contain the bucket
+//					if (bucketSegmentIndex != i) {
+//						// Move link to the linked list of the new bucket.
+//						// Note, that since we doubled the number of buckets, the target index into newBucketSegments
+//						// is the same as the old index into bucketSegments.
+//
+//						// Remove from old linked list
+//						if (prevElemPointer == INVALID_PREV_POINTER) {
+//							bucketSegments[i].putLong(bucketOffset, nextElemPointer);
+//						} else {
+//							recordSegmentsOutView.overwriteLongAt(prevElemPointer, prevHadSizeGrowth ? -nextElemPointer : nextElemPointer);
+//						}
+//
+//						// Add to the beginning of the other list
+//						final MemorySegment targetBucketSegment = newBucketSegments[i];
+//						final long oldFirstElemOfTargetListPointer = targetBucketSegment.getLong(bucketOffset);
+//						targetBucketSegment.putLong(bucketOffset, curElemPointer);
+//						recordSegmentsOutView.overwriteLongAt(curElemPointer, hadSizeGrowth ? -oldFirstElemOfTargetListPointer : oldFirstElemOfTargetListPointer);
+//					}
+//
+//					prevElemPointer = curElemPointer;
+//					curElemPointer = nextElemPointer;
+//				}
+//			}
+//		}
+//
+//		final MemorySegment[] finalBucketSegments = new MemorySegment[bucketSegments.length * 2];
+//		for (int i = 0; i < bucketSegments.length; i++) {
+//			finalBucketSegments[i] = bucketSegments[i];
+//			finalBucketSegments[i + bucketSegments.length] = newBucketSegments[i];
+//		}
+//		bucketSegments = finalBucketSegments;
+//	}
 
 	/**
 	 * Emits all aggregates currently held by the table to the collector, and resets the table.
@@ -579,7 +600,7 @@ public class ReduceHashTable<T> {
 		private int bucketSegmentIndex;
 		private int bucketOffset;
 		private boolean hadSizeGrowth;
-		private long currentPointer;
+		private long currentPointer; //todo: rename to curElemP
 
 		//todo: comment
 		//beleirni, hogy ha tobb azonos kulcsu van, akkor egyet ad csak vissza
@@ -653,12 +674,16 @@ public class ReduceHashTable<T> {
 			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
 			final int oldRecordPlaceSize = hadSizeGrowth ? MathUtils.roundUpToPowerOf2(oldRecordSize) : oldRecordSize;
 
+			//todo: ha megcsinalom a compaction-t, akkor itt akkor is uj hely kell, ha csokkent a meret
 			if (newRecordSize <= oldRecordPlaceSize) {
 				// overwrite record at its original place
 				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
 				// note: sign of next pointer in previous link is OK, no need to modify it
 			} else {
 				// new record doesn't fit in place of old, append new at end of recordSegments.
+
+				//todo: ha megcsinalom a compaction-t, akkor itt kell majd valami jelzes a regi pointer helyere, hogy ez egy ures hely!
+				// az ures hely meretet onnan tudom, hogy deserializalom, ami ott volt
 
 				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
 				final long pointerToAppended =
@@ -685,7 +710,13 @@ public class ReduceHashTable<T> {
 				throw new RuntimeException("insertAfterNoMatch was called after getMatchFor returned no match");
 			}
 
-			//todo: szamolni a load factort, es resizeTable
+//			//todo
+//			if (numElements > numBuckets) {
+//				resizeTable();
+//				insert(record);
+//				return true; // todo: vegiggondolni, hogy a return value / exception rendben van-e
+//			}
+//			//
 
 			// create new link
 			long pointerToAppended;
@@ -705,6 +736,7 @@ public class ReduceHashTable<T> {
 				recordSegmentsOutView.overwriteLongAt(prevPointer, hadSizeGrowth ? -pointerToAppended : pointerToAppended);
 			}
 
+			numElements++;
 			return true;
 		}
 	}
