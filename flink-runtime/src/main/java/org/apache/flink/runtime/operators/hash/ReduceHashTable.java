@@ -53,12 +53,7 @@ public class ReduceHashTable<T> {
 	/**
 	 * The next pointer of the last link in the linked lists will have this as next pointer.
 	 */
-	private static final long END_OF_LIST = 1L<<62; // warning: because of the sign bit trickery, this can't be 0 or negative //todo: update comment
-
-	/**
-	 * This value means that the prevPointer is "pointing to the bucket", and not into the record segments.
- 	 */
-	private static final long INVALID_PREV_POINTER = -2;
+	private static final long END_OF_LIST = 1L<<62;
 
 	private static final long RECORD_OFFSET_IN_LINK = 8;
 
@@ -115,7 +110,7 @@ public class ReduceHashTable<T> {
 
 	private T reuse;
 
-	private HashTableProber<T> prober;
+	private final HashTableProber<T> prober;
 
 
 	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, ReduceFunction<T> reducer,
@@ -231,7 +226,7 @@ public class ReduceHashTable<T> {
 
 	/**
 	 * Searches the hash table for a record with the given key.
-	 * If it is found, then it is overridden by the specified record.
+	 * If it is found, then it is overridden with the specified record.
 	 * Otherwise, the specified record is inserted.
 	 * @param record The record to insert or to replace with.
 	 * @throws IOException
@@ -345,7 +340,7 @@ public class ReduceHashTable<T> {
 	 */
 	public void emit() throws IOException {
 
-		//todo: ezt is a trukkos bejarassal kene, amit a compaction-nel csinalunk
+		//todo: ezt is a trukkos bejarassal kene, amit a compaction-nel csinalunk, es akkor nem lennenek cache missek
 
 		// go through all buckets and all linked lists, and emit all current partial aggregates
 		for (int i = 0; i < bucketSegments.length; i++) {
@@ -387,7 +382,7 @@ public class ReduceHashTable<T> {
 	 * WARNING: Do not call the write* methods of AbstractPagedOutputView directly, because lastPosition has to be
 	 * modified when appending data.
 	 */
-	public class AppendableRandomAccessOutputView extends AbstractPagedOutputView
+	private final class AppendableRandomAccessOutputView extends AbstractPagedOutputView
 	{
 		private final ArrayList<MemorySegment> segments;
 
@@ -527,20 +522,10 @@ public class ReduceHashTable<T> {
 				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
 			return oldLastPosition;
 		}
-
-		/**
-		 * Appends an END_OF_LIST pointer and a record.
-		 * @param record The record to write
-		 * @return A pointer to the written data
-		 * @throws IOException
-		 */
-		public long appendNilPointerAndRecord(T record) throws IOException {
-			return appendPointerAndRecord(END_OF_LIST, record);
-		}
 	}
 
 
-	public class StagingOutputView extends AbstractPagedOutputView {
+	private final class StagingOutputView extends AbstractPagedOutputView {
 
 		private final ArrayList<MemorySegment> segments;
 
@@ -591,19 +576,23 @@ public class ReduceHashTable<T> {
 			super(probeTypeComparator, pairComparator);
 		}
 
-		private long prevPointer;
-		private long nextPointer;
+		/**
+		 * This value means that the prevElemPtr is "pointing to the bucket", and not into the record segments.
+		 */
+		private static final long INVALID_PREV_POINTER = -2;
+
 		private int bucketSegmentIndex;
 		private int bucketOffset;
-		private long currentPointer; //todo: rename to curElemP
+		private long curElemPtr;
+		private long prevElemPtr;
+		private long nextPtr;
 
-		//todo: comment
-		//beleirni, hogy ha tobb azonos kulcsu van, akkor egyet ad csak vissza
 		/**
-		 *
-		 * @param record
-		 * @param targetForMatch
-         * @return
+		 * Searches the hash table for the record with the given key.
+		 * (If there are would be multiple matches, only one is returned.)
+		 * @param record The record whose key we are searching for
+		 * @param targetForMatch If a match is found, it will be written here
+         * @return targetForMatch if a match is found, otherwise null.
          */
 		@Override
 		public T getMatchFor(PT record, T targetForMatch) {
@@ -613,17 +602,17 @@ public class ReduceHashTable<T> {
 			final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
 			bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
 
-			currentPointer = bucketSegment.getLong(bucketOffset);
+			curElemPtr = bucketSegment.getLong(bucketOffset);
 
 			pairComparator.setReference(record);
 
 			T currentRecordInList = targetForMatch;
 
-			prevPointer = INVALID_PREV_POINTER;
+			prevElemPtr = INVALID_PREV_POINTER;
 			try {
-				while (currentPointer != END_OF_LIST) {
-					recordSegmentsInView.setReadPosition(currentPointer);
-					nextPointer = recordSegmentsInView.readLong();
+				while (curElemPtr != END_OF_LIST) {
+					recordSegmentsInView.setReadPosition(curElemPtr);
+					nextPtr = recordSegmentsInView.readLong();
 
 					currentRecordInList = serializer.deserialize(currentRecordInList, recordSegmentsInView);
 					if (pairComparator.equalToReference(currentRecordInList)) {
@@ -631,8 +620,8 @@ public class ReduceHashTable<T> {
 						return currentRecordInList;
 					}
 
-					prevPointer = currentPointer;
-					currentPointer = nextPointer;
+					prevElemPtr = curElemPtr;
+					curElemPtr = nextPtr;
 				}
 			} catch (IOException ex) {
 				throw new RuntimeException("Bug in ReduceHashTable", ex);
@@ -649,7 +638,7 @@ public class ReduceHashTable<T> {
          */
 		@Override
 		public void updateMatch(T newRecord) throws IOException {
-			if (currentPointer == END_OF_LIST) {
+			if (curElemPtr == END_OF_LIST) {
 				throw new RuntimeException("updateMatch was called after getMatchFor returned no match");
 			}
 
@@ -660,12 +649,11 @@ public class ReduceHashTable<T> {
 			stagingSegmentsInView.setReadPosition(0);
 
 			// Determine the size of the place of the old record.
-			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
+			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
 
-			//todo: ha megcsinalom a compaction-t, akkor itt akkor is uj hely kell, ha csokkent a meret
 			if (newRecordSize == oldRecordSize) {
 				// overwrite record at its original place
-				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
+				recordSegmentsOutView.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
 			} else {
 				// new record has a different size than the old one, append new at end of recordSegments.
 				// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know the size of this
@@ -675,14 +663,14 @@ public class ReduceHashTable<T> {
 				// az ures hely meretet onnan tudom, hogy deserializalom, ami ott volt
 
 				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecord(nextPointer, stagingSegmentsInView, newRecordSize);
+					recordSegmentsOutView.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
 
 				// modify the pointer in the previous link
-				if (prevPointer == INVALID_PREV_POINTER) {
+				if (prevElemPtr == INVALID_PREV_POINTER) {
 					// list had only one element, so prev is in the bucketSegments
 					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 				} else {
-					recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
+					recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
 				}
 			}
 		}
@@ -704,18 +692,18 @@ public class ReduceHashTable<T> {
 			// create new link
 			long pointerToAppended;
 			try {
-				pointerToAppended = recordSegmentsOutView.appendNilPointerAndRecord(record);
+				pointerToAppended = recordSegmentsOutView.appendPointerAndRecord(END_OF_LIST ,record);
 			} catch (EOFException ex) {
 				return false; // we have run out of memory
 			}
 
 			// add new link to the end of the list
-			if (prevPointer == INVALID_PREV_POINTER) {
+			if (prevElemPtr == INVALID_PREV_POINTER) {
 				// list was empty
 				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 			} else {
 				// update the pointer of the last element of the list.
-				recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
+				recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
 			}
 
 			numElements++;
