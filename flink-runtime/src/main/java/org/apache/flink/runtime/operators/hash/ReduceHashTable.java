@@ -38,8 +38,6 @@ import java.util.List;
 /**
  * todo: comment on hash table structure
  *
- * (beleirni, hogy ha csokkent egy record merete, akkor elvesztjuk az infot az eredeti meretrol, vagyis ha visszano,
- * akkor uj helyet fogunk foglalni)
  */
 
 //todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
@@ -356,7 +354,7 @@ public class ReduceHashTable<T> {
 				long curElemPointer = seg.getLong(j << bucketSizeBits);
 				while (curElemPointer != END_OF_LIST) {
 					recordSegmentsInView.setReadPosition(curElemPointer);
-					curElemPointer = Math.abs(recordSegmentsInView.readLong());
+					curElemPointer = recordSegmentsInView.readLong();
 					reuse = serializer.deserialize(reuse, recordSegmentsInView);
 					outputCollector.collect(reuse);
 				}
@@ -502,13 +500,12 @@ public class ReduceHashTable<T> {
 		 * @return A pointer to the written data
 		 * @throws IOException
 		 */
-		public long appendPointerAndCopyRecordAndSkip(long pointer, DataInputView input, int recordSize, int skipSize) throws IOException {
+		public long appendPointerAndCopyRecord(long pointer, DataInputView input, int recordSize) throws IOException {
 			setWritePosition(lastPosition);
 			final long oldLastPosition = lastPosition;
 			writeLong(pointer);
 			write(input, recordSize);
-			skipBytesToWrite(skipSize);
-			lastPosition += 8 + recordSize + skipSize;
+			lastPosition += 8 + recordSize;
 			return oldLastPosition;
 		}
 
@@ -595,11 +592,9 @@ public class ReduceHashTable<T> {
 		}
 
 		private long prevPointer;
-		private boolean prevHadSizeGrowth;
 		private long nextPointer;
 		private int bucketSegmentIndex;
 		private int bucketOffset;
-		private boolean hadSizeGrowth;
 		private long currentPointer; //todo: rename to curElemP
 
 		//todo: comment
@@ -629,10 +624,6 @@ public class ReduceHashTable<T> {
 				while (currentPointer != END_OF_LIST) {
 					recordSegmentsInView.setReadPosition(currentPointer);
 					nextPointer = recordSegmentsInView.readLong();
-					// the sign bit of nextPointer stores whether we had a record size change at this key before
-					prevHadSizeGrowth = hadSizeGrowth;
-					hadSizeGrowth = nextPointer < 0;
-					nextPointer = Math.abs(nextPointer);
 
 					currentRecordInList = serializer.deserialize(currentRecordInList, recordSegmentsInView);
 					if (pairComparator.equalToReference(currentRecordInList)) {
@@ -669,33 +660,29 @@ public class ReduceHashTable<T> {
 			stagingSegmentsInView.setReadPosition(0);
 
 			// Determine the size of the place of the old record.
-			// Note, that if we had a size growth before, then the size will have been rounded up to the nearest
-			// power of 2.
 			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (currentPointer + RECORD_OFFSET_IN_LINK));
-			final int oldRecordPlaceSize = hadSizeGrowth ? MathUtils.roundUpToPowerOf2(oldRecordSize) : oldRecordSize;
 
 			//todo: ha megcsinalom a compaction-t, akkor itt akkor is uj hely kell, ha csokkent a meret
-			if (newRecordSize <= oldRecordPlaceSize) {
+			if (newRecordSize == oldRecordSize) {
 				// overwrite record at its original place
 				recordSegmentsOutView.overwriteRecordAt(currentPointer + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
-				// note: sign of next pointer in previous link is OK, no need to modify it
 			} else {
-				// new record doesn't fit in place of old, append new at end of recordSegments.
+				// new record has a different size than the old one, append new at end of recordSegments.
+				// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know the size of this
+				// place during the compaction, and wouldn't know where does the next record start.
 
 				//todo: ha megcsinalom a compaction-t, akkor itt kell majd valami jelzes a regi pointer helyere, hogy ez egy ures hely!
 				// az ures hely meretet onnan tudom, hogy deserializalom, ami ott volt
 
-				// append new record and then skip bytes to round up the size of the place to the nearest power of 2
 				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecordAndSkip(-Math.abs(nextPointer), stagingSegmentsInView,
-						newRecordSize, MathUtils.roundUpToPowerOf2(newRecordSize) - newRecordSize);
+					recordSegmentsOutView.appendPointerAndCopyRecord(nextPointer, stagingSegmentsInView, newRecordSize);
 
 				// modify the pointer in the previous link
 				if (prevPointer == INVALID_PREV_POINTER) {
 					// list had only one element, so prev is in the bucketSegments
 					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 				} else {
-					recordSegmentsOutView.overwriteLongAt(prevPointer, prevHadSizeGrowth ? -pointerToAppended : pointerToAppended);
+					recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
 				}
 			}
 		}
@@ -706,10 +693,6 @@ public class ReduceHashTable<T> {
 		 * Important: The given record should have the same key as the record that was given to getMatchFor!
 		 */
 		public boolean insertAfterNoMatch(T record) throws IOException {
-			if (currentPointer == END_OF_LIST) {
-				throw new RuntimeException("insertAfterNoMatch was called after getMatchFor returned no match");
-			}
-
 //			//todo
 //			if (numElements > numBuckets) {
 //				resizeTable();
@@ -732,8 +715,7 @@ public class ReduceHashTable<T> {
 				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 			} else {
 				// update the pointer of the last element of the list.
-				// (we need to use hadSizeGrowth instead of prevHadSizeGrowth)
-				recordSegmentsOutView.overwriteLongAt(prevPointer, hadSizeGrowth ? -pointerToAppended : pointerToAppended);
+				recordSegmentsOutView.overwriteLongAt(prevPointer, pointerToAppended);
 			}
 
 			numElements++;

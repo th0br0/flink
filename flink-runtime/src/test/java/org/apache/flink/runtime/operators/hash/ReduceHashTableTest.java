@@ -60,7 +60,7 @@ public class ReduceHashTableTest {
 			this.outputCollector = outputCollector;
 		}
 
-		public void processRecord(T record, K key) throws Exception {
+		public void processRecordWithReduce(T record, K key) throws Exception {
 			record = serializer.copy(record);
 
 			if (!map.containsKey(key)) {
@@ -116,15 +116,15 @@ public class ReduceHashTableTest {
 		final int numIntermingledEmits = 5;
 		for (IntPair record: input) {
 			table.processRecordWithReduce(serializer.copy(record));
-//			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
-//			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
-//				// this will fire approx. numIntermingledEmits times
-//				reference.emit();
-//				table.emit();
-//			}
+			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
+			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
+				// this will fire approx. numIntermingledEmits times
+				reference.emit();
+				table.emit();
+			}
 		}
-//		reference.emit();
-//		table.emit();
+		reference.emit();
+		table.emit();
 
 		long end = System.currentTimeMillis();
 		System.out.println("stop, time: " + (end - start)); //todo remove
@@ -182,10 +182,10 @@ public class ReduceHashTableTest {
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
 
 		// Process some manual stuff
-		reference.processRecord(serializer.copy(new StringPair("foo", "bar")), "foo");
-		reference.processRecord(serializer.copy(new StringPair("foo", "baz")), "foo");
-		reference.processRecord(serializer.copy(new StringPair("alma", "xyz")), "alma");
-		reference.processRecord(serializer.copy(new StringPair("korte", "abc")), "korte");
+		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")), "foo");
+		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")), "foo");
+		reference.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")), "alma");
+		reference.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")), "korte");
 		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")));
 		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")));
 		table.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")));
@@ -205,7 +205,7 @@ public class ReduceHashTableTest {
 		// Process the generated input
 		final int numIntermingledEmits = 5;
 		for (StringPair record: input) {
-			reference.processRecord(serializer.copy(record), record.getKey());
+			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
 			table.processRecordWithReduce(serializer.copy(record));
 			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
 				// this will fire approx. numIntermingledEmits times

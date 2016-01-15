@@ -82,17 +82,6 @@ public final class MathUtils {
 	public static int roundDownToPowerOf2(int value) {
 		return Integer.highestOneBit(value);
 	}
-
-	/**
-	 * Increments the given number up to the closest power of two. If the argument is a
-	 * power of two, it remains unchanged.
-	 *
-	 * @param value The value to round up.
-	 * @return The closest value that is a power of two and greater or equal than the given value.
-	 */
-	public static int roundUpToPowerOf2(int value) {
-		return roundDownToPowerOf2(value - 1) << 1;
-	}
 	
 	/**
 	 * Casts the given value to a 32 bit integer, if it can be safely done. If the cast would change the numeric
