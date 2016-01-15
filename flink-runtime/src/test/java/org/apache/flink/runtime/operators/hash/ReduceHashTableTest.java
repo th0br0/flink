@@ -86,7 +86,7 @@ public class ReduceHashTableTest {
 
 		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses (also in the segment arrays))
 		final int valueRange = 10;
-		final int numRecords = 1000000; //10000000;
+		final int numRecords = 10000000; //10000000;
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -98,7 +98,7 @@ public class ReduceHashTableTest {
 			serializer, comparator, reducer, new CopyingListCollector<>(expectedOutput, serializer));
 
 		// Create the ReduceHashTable to test
-		final int numMemPages = keyRange * 100 / PAGE_SIZE; // memory use should be proportional to the number of different keys
+		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use should be proportional to the number of different keys
 		List<IntPair> actualOutput = new ArrayList<>();
 		ReduceHashTable<IntPair> table = new ReduceHashTable<>(
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
@@ -115,7 +115,10 @@ public class ReduceHashTableTest {
 		// Process the generated input
 		final int numIntermingledEmits = 5;
 		for (IntPair record: input) {
-			table.processRecordWithReduce(serializer.copy(record));
+			boolean succeeded = table.processRecordWithReduce(serializer.copy(record));
+			if (!succeeded) {
+				throw new RuntimeException("Not enough memory; set numMemPages higher");
+			}
 			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
 			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
 				// this will fire approx. numIntermingledEmits times

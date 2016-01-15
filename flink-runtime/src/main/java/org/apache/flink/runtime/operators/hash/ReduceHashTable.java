@@ -43,6 +43,12 @@ import java.util.List;
 
 //todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
 
+//todo: olyan teszt is kell, amikor nem adok neki eleg memoriat
+
+//todo: vegig kene gondolni, hogy mikor dobunk exception-t, es mikor return value-val jelezzuk a memoria megteltet
+
+//todo: compaction, ha kifogytunk a memoriabol
+
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> {
 
@@ -88,6 +94,8 @@ public class ReduceHashTable<T> {
 	 */
 	private final ArrayList<MemorySegment> freeMemorySegments;
 
+	private final int numAllMemorySegments;
+
 	/**
 	 * The size of the provided memoroy segments.
 	 */
@@ -132,6 +140,7 @@ public class ReduceHashTable<T> {
 		this.serializer = serializer;
 		this.comparator = comparator;
 		this.reducer = reducer;
+		this.numAllMemorySegments = memory.size();
 		this.freeMemorySegments = new ArrayList<>(memory);
 		this.outputCollector = outputCollector;
 		this.objectReuseEnabled = objectReuseEnabled;
@@ -155,7 +164,7 @@ public class ReduceHashTable<T> {
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
 
 		//todo: Maybe calculate fraction from record size (and maybe make size a power of 2, to have faster divisions?)
-		resetBucketSegments(freeMemorySegments.size() / 100); //  /4-gyel egesz jol mukodott
+		resetBucketSegments(calcInitialNumBucketSegments());
 
 		ArrayList<MemorySegment> recordSegments = new ArrayList<>();
 		recordSegments.add(allocateSegment()); //todo: esetleg mashogy megoldani, hogy ne durranjon el a konstruktor
@@ -169,6 +178,19 @@ public class ReduceHashTable<T> {
 
 		reuse = serializer.createInstance();
 		prober = new HashTableProber<>(comparator, new SameTypePairComparator<>(comparator));
+	}
+
+	private int calcInitialNumBucketSegments() {
+		int recordLength = serializer.getLength();
+		double fraction;
+		if (recordLength == -1) {
+			// It seems that resizing is quite efficient, so we can err here on the too few bucket segments side.
+			// Even with small records, we lose only ~15% speed.
+			fraction = 0.1;
+		} else {
+			fraction = 8.0 / (16 + recordLength);
+		}
+		return Math.max(1, (int)(numAllMemorySegments * fraction));
 	}
 
 	private void resetBucketSegments(int numBucketSegments) {
@@ -203,7 +225,7 @@ public class ReduceHashTable<T> {
 		}
 	}
 
-	//todo: comment, es vegiggondolni, hogy kell-e egyaltalan ez; most csak azert raktam be, hogy performance comparsion fair legyen,
+	//todo: comment, es vegiggondolni, hogy kell-e egyaltalan ez; most csak azert raktam be, hogy performance a comparison fair legyen,
 	// mert a HashTablePerformanceComparison-ben egymas utan jonnek a kulcsok
 	private static int hash(int code) {
 		code = (code + 0x7ed55d16) + (code << 12);
@@ -229,7 +251,7 @@ public class ReduceHashTable<T> {
 	public boolean processRecordWithReduce(T record) throws Exception {
 		T match = prober.getMatchFor(record, reuse);
 		if (match == null) {
-			return prober.insertAfterNoMatch(record); //todo: ez igy nem biztos, hogy jo, mert lehet, hogy exception-t dob, amit a hivo hogy is ertelmez? egysegesiteni kene, hogy mikor dobunk exception-t, es mikor return value-val jelezzuk a memoria megteltet
+			return prober.insertAfterNoMatch(record);
 		} else {
 			// do the reduce step
 			T res = reducer.reduce(match, record);
@@ -272,11 +294,6 @@ public class ReduceHashTable<T> {
 	 * @throws IOException
      */
 	public void insert(T record) throws IOException {
-//		//todo: tesztelni
-		if (numElements > numBuckets) {
-			resizeTable();
-		}
-
 		final int hashCode = hash(comparator.hash(record));
 		final int bucket = hashCode % numBuckets;
 		final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
@@ -286,18 +303,26 @@ public class ReduceHashTable<T> {
 
 		final long newFirstPointer = recordSegmentsOutView.appendPointerAndRecord(firstPointer, record);
 		bucketSegment.putLong(bucketOffset, newFirstPointer);
+
 		numElements++;
+		resizeTableIfNecessary();
+	}
+
+	private void resizeTableIfNecessary() {
+		if (numElements > numBuckets) {
+			final long newNumBucketSegments = 2L * bucketSegments.length;
+			if (newNumBucketSegments < Integer.MAX_VALUE &&
+				newNumBucketSegments - bucketSegments.length < freeMemorySegments.size() &&
+				newNumBucketSegments < numAllMemorySegments / 2)
+			resizeTable((int)newNumBucketSegments);
+		}
 	}
 
 	/**
 	 * Doubles the number of buckets.
 	 */
-	private void resizeTable() {
-		//todo: vigyazni, hogy ne nohessen tul nagyra:
-		// egyreszt ne lepje tul a maxintet, masreszt ne vegye el valahogy az osszes memoriat
-		//todo: ehhez kene egy resizeIfNecessary fv, es azt kene mindenfele helyekrol hivni, nem pedig ezt, ami boollal terve vissza mondana, hogy volt-e resize
-
-		resetBucketSegments(bucketSegments.length * 2);
+	private void resizeTable(int newNumBucketSegments) {
+		resetBucketSegments(newNumBucketSegments);
 		rebuild();
 	}
 
@@ -701,20 +726,12 @@ public class ReduceHashTable<T> {
 		 * It inserts the given record to the hash table.
 		 * Important: The given record should have the same key as the record that was given to getMatchFor!
 		 */
-		public boolean insertAfterNoMatch(T record) throws IOException {
-			//todo: tesztelni
-			if (numElements > numBuckets) {
-				resizeTable();
-				insert(record);
-				return true; // todo: vegiggondolni, hogy a return value / exception rendben van-e
-			}
-			//
-
+		public boolean insertAfterNoMatch(T record) {
 			// create new link
 			long pointerToAppended;
 			try {
 				pointerToAppended = recordSegmentsOutView.appendPointerAndRecord(END_OF_LIST ,record);
-			} catch (EOFException ex) {
+			} catch (IOException ex) {
 				return false; // we have run out of memory
 			}
 
@@ -724,10 +741,16 @@ public class ReduceHashTable<T> {
 				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 			} else {
 				// update the pointer of the last element of the list.
-				recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
+				try {
+					recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
+				} catch (IOException ex) {
+					throw new RuntimeException("Bug in ReduceHashTable");
+				}
 			}
 
 			numElements++;
+			resizeTableIfNecessary();
+
 			return true;
 		}
 	}
