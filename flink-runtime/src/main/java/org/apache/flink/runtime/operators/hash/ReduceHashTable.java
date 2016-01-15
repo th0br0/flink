@@ -33,6 +33,7 @@ import org.apache.flink.util.Collector;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -53,7 +54,20 @@ public class ReduceHashTable<T> {
 	/**
 	 * The next pointer of the last link in the linked lists will have this as next pointer.
 	 */
-	private static final long END_OF_LIST = 1L<<62;
+	private static final long END_OF_LIST = -1;
+
+	/**
+	 * The next pointer of a link will have this value, if it is not part of the linked list.
+	 * (This can happen because the record was moved due to a size change.)
+	 * Note: the record that is in the link should still be readable, in order to be possible to determine
+	 * the size of the place.
+	 */
+	private static final long ABANDONED_RECORD = -2;
+
+	/**
+	 * This value means that the prevElemPtr is "pointing to the bucket", and not into the record segments.
+	 */
+	private static final long INVALID_PREV_POINTER = -3;
 
 	private static final long RECORD_OFFSET_IN_LINK = 8;
 
@@ -72,7 +86,7 @@ public class ReduceHashTable<T> {
 	 * This initially contains all the memory we have, and then segments
 	 * are taken from it by bucketSegments and recordSegments.
 	 */
-	private final ArrayList<MemorySegment> freeMemory;
+	private final ArrayList<MemorySegment> freeMemorySegments;
 
 	/**
 	 * The size of the provided memoroy segments.
@@ -118,19 +132,19 @@ public class ReduceHashTable<T> {
 		this.serializer = serializer;
 		this.comparator = comparator;
 		this.reducer = reducer;
-		this.freeMemory = new ArrayList<>(memory);
+		this.freeMemorySegments = new ArrayList<>(memory);
 		this.outputCollector = outputCollector;
 		this.objectReuseEnabled = objectReuseEnabled;
 
 		// some sanity checks first
-		if (freeMemory.size() < MIN_NUM_MEMORY_SEGMENTS) {
+		if (freeMemorySegments.size() < MIN_NUM_MEMORY_SEGMENTS) {
 			throw new IllegalArgumentException("Too few memory segments provided. ReduceHashTable needs at least " +
 				MIN_NUM_MEMORY_SEGMENTS + " memory segments.");
 		}
 
 		// check the size of the first buffer and record it. all further buffers must have the same size.
 		// the size must also be a power of 2
-		this.segmentSize = freeMemory.get(0).size();
+		this.segmentSize = freeMemorySegments.get(0).size();
 		if ( (this.segmentSize & this.segmentSize - 1) != 0) {
 			throw new IllegalArgumentException("Hash Table requires buffers whose size is a power of 2.");
 		}
@@ -140,10 +154,8 @@ public class ReduceHashTable<T> {
 		this.numBucketsPerSegmentBits = MathUtils.log2strict(this.numBucketsPerSegment);
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
 
-		//todo: Calculate fraction from record size (and maybe make size a power of 2, to have faster divisions?)
-		bucketSegments = new MemorySegment[freeMemory.size() / 4];
-		initBucketSegments(bucketSegments);
-		this.numBuckets = bucketSegments.length * this.numBucketsPerSegment;
+		//todo: Maybe calculate fraction from record size (and maybe make size a power of 2, to have faster divisions?)
+		resetBucketSegments(freeMemorySegments.size() / 100); //  /4-gyel egesz jol mukodott
 
 		ArrayList<MemorySegment> recordSegments = new ArrayList<>();
 		recordSegments.add(allocateSegment()); //todo: esetleg mashogy megoldani, hogy ne durranjon el a konstruktor
@@ -159,20 +171,33 @@ public class ReduceHashTable<T> {
 		prober = new HashTableProber<>(comparator, new SameTypePairComparator<>(comparator));
 	}
 
-	private void initBucketSegments(MemorySegment[] segments) {
-		for(int i = 0; i < segments.length; i++) {
-			segments[i] = allocateSegment();
+	private void resetBucketSegments(int numBucketSegments) {
+		if (numBucketSegments < 1) {
+			throw new RuntimeException("Bug in ReduceHashTable");
+		}
+
+		if (bucketSegments != null) {
+			freeMemorySegments.addAll(Arrays.asList(bucketSegments));
+		}
+
+		if (numBuckets % numBucketsPerSegment != 0) {
+			throw new RuntimeException("Bug in ReduceHashTable");
+		}
+		bucketSegments = new MemorySegment[numBucketSegments];
+		for(int i = 0; i < bucketSegments.length; i++) {
+			bucketSegments[i] = allocateSegment();
 			// Init all pointers in all buckets to END_OF_LIST
 			for(int j = 0; j < this.numBucketsPerSegment; j++) {
-				segments[i].putLong(j << bucketSizeBits, END_OF_LIST);
+				bucketSegments[i].putLong(j << bucketSizeBits, END_OF_LIST);
 			}
 		}
+		numBuckets = numBucketSegments * numBucketsPerSegment;
 	}
 
 	private MemorySegment allocateSegment() {
-		int s = this.freeMemory.size();
+		int s = this.freeMemorySegments.size();
 		if (s > 0) {
-			return this.freeMemory.remove(s - 1);
+			return this.freeMemorySegments.remove(s - 1);
 		} else {
 			return null;
 		}
@@ -247,10 +272,10 @@ public class ReduceHashTable<T> {
 	 * @throws IOException
      */
 	public void insert(T record) throws IOException {
-//		//todo
-//		if (numElements > numBuckets) {
-//			resizeTable();
-//		}
+//		//todo: tesztelni
+		if (numElements > numBuckets) {
+			resizeTable();
+		}
 
 		final int hashCode = hash(comparator.hash(record));
 		final int bucket = hashCode % numBuckets;
@@ -264,135 +289,101 @@ public class ReduceHashTable<T> {
 		numElements++;
 	}
 
-	// todo: egyelore bugos
-	// ujra kene irni a compactos vegigmenessel
-	//   lehet, hogy ez egyszeru lesz, mert kb. annyi, hogy kidobom a regi bucketeket, initelek ujakat (ketszer annyit), es aztan meghivom a compact belsejet,
-	//   ami vegigmegy a recordsegmenteken, es beszur mindent
-//	/**
-//	 * Doubles the number of buckets
-//	 */
-//	private void resizeTable() throws IOException {
-//		// We allocate a new array of bucket segments, that has the same size as the old,
-//		// move some of the records to the new segments, and then concatenate the two arrays.
-//
-//		// vagy lehet, hogy ezt olyan vegigmenessel jobb lenne, mint amit a compact csinal?
-//		//	 nem tudom, hogy gyorsabb lenne-e, de talan tobb code reuse lehetne ugy
-//
-//		MemorySegment[] newBucketSegments = new MemorySegment[bucketSegments.length];
-//		initBucketSegments(newBucketSegments);
-//
-//		numBuckets *= 2;
-//
-//		T record = reuse;
-//		for (int i = 0; i < bucketSegments.length; i++) {
-//			MemorySegment seg = bucketSegments[i];
-//			for (int j = 0; j < numBucketsPerSegment; j++) {
-//				long prevElemPointer = INVALID_PREV_POINTER;
-//				final int bucketOffset = j << bucketSizeBits;
-//				long curElemPointer = seg.getLong(bucketOffset);
-//				boolean hadSizeGrowth = false, prevHadSizeGrowth = false;
-//				while (curElemPointer != END_OF_LIST) {
-//					recordSegmentsInView.setReadPosition(curElemPointer);
-//					long nextElemPointer = recordSegmentsInView.readLong();
-//					prevHadSizeGrowth = hadSizeGrowth;
-//					hadSizeGrowth = nextElemPointer < 0;
-//					nextElemPointer = Math.abs(nextElemPointer);
-//					record = serializer.deserialize(record, recordSegmentsInView);
-//
-//					final int hashCode = hash(comparator.hash(record));
-//					final int bucket = hashCode % numBuckets; // (numBuckets is the new number of buckets here)
-//					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment should contain the bucket
-//					if (bucketSegmentIndex != i) {
-//						// Move link to the linked list of the new bucket.
-//						// Note, that since we doubled the number of buckets, the target index into newBucketSegments
-//						// is the same as the old index into bucketSegments.
-//
-//						// Remove from old linked list
-//						if (prevElemPointer == INVALID_PREV_POINTER) {
-//							bucketSegments[i].putLong(bucketOffset, nextElemPointer);
-//						} else {
-//							recordSegmentsOutView.overwriteLongAt(prevElemPointer, prevHadSizeGrowth ? -nextElemPointer : nextElemPointer);
-//						}
-//
-//						// Add to the beginning of the other list
-//						final MemorySegment targetBucketSegment = newBucketSegments[i];
-//						final long oldFirstElemOfTargetListPointer = targetBucketSegment.getLong(bucketOffset);
-//						targetBucketSegment.putLong(bucketOffset, curElemPointer);
-//						recordSegmentsOutView.overwriteLongAt(curElemPointer, hadSizeGrowth ? -oldFirstElemOfTargetListPointer : oldFirstElemOfTargetListPointer);
-//					}
-//
-//					prevElemPointer = curElemPointer;
-//					curElemPointer = nextElemPointer;
-//				}
-//			}
-//		}
-//
-//		final MemorySegment[] finalBucketSegments = new MemorySegment[bucketSegments.length * 2];
-//		for (int i = 0; i < bucketSegments.length; i++) {
-//			finalBucketSegments[i] = bucketSegments[i];
-//			finalBucketSegments[i + bucketSegments.length] = newBucketSegments[i];
-//		}
-//		bucketSegments = finalBucketSegments;
-//	}
+	/**
+	 * Doubles the number of buckets.
+	 */
+	private void resizeTable() {
+		//todo: vigyazni, hogy ne nohessen tul nagyra:
+		// egyreszt ne lepje tul a maxintet, masreszt ne vegye el valahogy az osszes memoriat
+		//todo: ehhez kene egy resizeIfNecessary fv, es azt kene mindenfele helyekrol hivni, nem pedig ezt, ami boollal terve vissza mondana, hogy volt-e resize
+
+		resetBucketSegments(bucketSegments.length * 2);
+		rebuild();
+	}
+
+	/**
+	 * This function reinitializes the bucket segments,
+	 * reads all records from the record segments (sequentially, without using the pointers or the buckets),
+	 * and rebuilds the hash table.
+	 */
+	private void rebuild() {
+		try {
+			recordSegmentsInView.setReadPosition(0);
+			final long oldAppendPosition = recordSegmentsOutView.getAppendPosition();
+			recordSegmentsOutView.resetAppendPosition();
+			recordSegmentsOutView.setWritePosition(0);
+			while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
+				final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
+				T record = serializer.deserialize(reuse, recordSegmentsInView);
+
+				if (!isAbandoned) {
+					// Insert into table
+
+					final int hashCode = hash(comparator.hash(record));
+					final int bucket = hashCode % numBuckets;
+					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+					final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
+					final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+					final long firstPointer = bucketSegment.getLong(bucketOffset);
+
+					long ptrToAppended = recordSegmentsOutView.noSeekAppendPointerAndRecord(firstPointer, record);
+					bucketSegment.putLong(bucketOffset, ptrToAppended);
+				}
+			}
+			recordSegmentsOutView.freeSegmentsAfterAppendPosition();
+		} catch (IOException ex) {
+			throw new RuntimeException("Bug in ReduceHashTable");
+		}
+	}
 
 	/**
 	 * Emits all aggregates currently held by the table to the collector, and resets the table.
 	 */
 	public void emit() throws IOException {
-
-		//todo: ezt is a trukkos bejarassal kene, amit a compaction-nel csinalunk, es akkor nem lennenek cache missek
-
-		// go through all buckets and all linked lists, and emit all current partial aggregates
-		for (int i = 0; i < bucketSegments.length; i++) {
-			MemorySegment seg = bucketSegments[i];
-			for (int j = 0; j < numBucketsPerSegment; j++) {
-				long curElemPointer = seg.getLong(j << bucketSizeBits);
-				while (curElemPointer != END_OF_LIST) {
-					recordSegmentsInView.setReadPosition(curElemPointer);
-					curElemPointer = recordSegmentsInView.readLong();
-					reuse = serializer.deserialize(reuse, recordSegmentsInView);
-					outputCollector.collect(reuse);
+		recordSegmentsInView.setReadPosition(0);
+		final long oldAppendPosition = recordSegmentsOutView.getAppendPosition();
+		while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
+			final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
+			T record = serializer.deserialize(reuse, recordSegmentsInView);
+			if (!isAbandoned) {
+				outputCollector.collect(record);
+				if (!objectReuseEnabled) { //todo: vegiggondolni, hogy ez ide kell-e
+					reuse = serializer.createInstance();
 				}
 			}
 		}
 
 		// reset the table
 
-		int n = bucketSegments.length;
-		for (int i = 0; i < n; i++) {
-			freeMemory.add(bucketSegments[i]);
-		}
-		recordSegmentsOutView.giveBackSegments();
-		freeMemory.addAll(stagingSegments);
+		recordSegmentsOutView.giveBackSegments(); // Note: recordSegmentsInView uses the same segments
+
+		resetBucketSegments(bucketSegments.length);
+
+		freeMemorySegments.addAll(stagingSegments);
 		stagingSegments.clear();
-
-		bucketSegments = new MemorySegment[freeMemory.size() / 2];
-		initBucketSegments(bucketSegments);
-		this.numBuckets = bucketSegments.length * this.numBucketsPerSegment;
-
 		stagingSegments.add(allocateSegment());
 	}
 
 
 	/**
 	 * An OutputView that
+	 *  - can append a record
 	 *  - can write a record to an arbitrary position (WARNING: the new record must not be larger than the old one)
-	 *  - can append a record (with a specified pointer before it)
-	 *  - takes memory from ReduceHashTable.freeMemory on append
-	 * WARNING: Do not call the write* methods of AbstractPagedOutputView directly, because lastPosition has to be
-	 * modified when appending data.
+	 *  - can be rewritten by calling resetAppendPosition
+	 *  - takes memory from ReduceHashTable.freeMemorySegments on append
+	 * WARNING: Do not call the write* methods of AbstractPagedOutputView directly when the write position is at the end,
+	 * because appendPosition has to be modified when appending data.
 	 */
 	private final class AppendableRandomAccessOutputView extends AbstractPagedOutputView
 	{
-		private final ArrayList<MemorySegment> segments;
+		private final ArrayList<MemorySegment> segments; //WARNING: recordSegmentsInView also has a ref to this object
+
+		private final int segmentSizeBits;
+		private final int segmentSizeMask;
 
 		private int currentSegmentIndex;
 
-		private final int segmentSizeBits;
-
-		private final int segmentSizeMask;
-
-		private long lastPosition = 0;
+		private long appendPosition = 0;
 
 
 		public AppendableRandomAccessOutputView(ArrayList<MemorySegment> segments, int segmentSize) {
@@ -429,38 +420,56 @@ public class ReduceHashTable<T> {
 		}
 
 		private void setWritePosition(long position) throws EOFException {
-			if (position > lastPosition) {
+			if (position > appendPosition) {
 				throw new IndexOutOfBoundsException();
 			}
 
-			final int bufferNum = (int) (position >>> this.segmentSizeBits);
+			final int segmentIndex = (int) (position >>> this.segmentSizeBits);
 			final int offset = (int) (position & this.segmentSizeMask);
 
-			// If position == lastPosition and the last buffer is full,
+			// If position == appendPosition and the last buffer is full,
 			// then we will be seeking to the beginning of a new segment
-			if (bufferNum == segments.size()) {
+			if (segmentIndex == segments.size()) {
 				addSegment();
 			}
 
-			this.currentSegmentIndex = bufferNum;
-			seekOutput(this.segments.get(bufferNum), offset);
+			this.currentSegmentIndex = segmentIndex;
+			seekOutput(this.segments.get(segmentIndex), offset);
 		}
 
 		/**
-		 * Moves all its memory segments to freeMemory.
+		 * Moves all its memory segments to freeMemorySegments.
 		 * Warning: this will be in an unwritable state after this call: you have to
 		 * call setWritePosition before writing again.
 		 */
 		public void giveBackSegments() {
-			freeMemory.addAll(segments);
+			freeMemorySegments.addAll(segments);
 			segments.clear();
 
-			lastPosition = 0;
+			resetAppendPosition();
+		}
 
-			// this is just for sefety (making sure that we fail immediately
+		/**
+		 * Sets appendPosition and the write position to 0, so that appending starts
+		 * overwriting elements from the beginning. (This is used in rebuild.)
+		 * Note: if data was written to the area after the current appendPosition
+		 * (before a call to resetAppendPosition), it should still be readable.
+		 */
+		public void resetAppendPosition() {
+			appendPosition = 0;
+
+			// this is just for safety (making sure that we fail immediately
 			// if a write happens without calling setWritePosition)
 			this.currentSegmentIndex = -1;
 			seekOutput(null, -1);
+		}
+
+		public void freeSegmentsAfterAppendPosition() {
+			final int appendSegmentIndex = (int)(appendPosition >>> this.segmentSizeBits);
+			while (segments.size() > appendSegmentIndex + 1) {
+				freeMemorySegments.add(segments.get(segments.size() - 1));
+				segments.remove(segments.size() - 1);
+			}
 		}
 
 		/**
@@ -496,11 +505,11 @@ public class ReduceHashTable<T> {
 		 * @throws IOException
 		 */
 		public long appendPointerAndCopyRecord(long pointer, DataInputView input, int recordSize) throws IOException {
-			setWritePosition(lastPosition);
-			final long oldLastPosition = lastPosition;
+			setWritePosition(appendPosition);
+			final long oldLastPosition = appendPosition;
 			writeLong(pointer);
 			write(input, recordSize);
-			lastPosition += 8 + recordSize;
+			appendPosition += 8 + recordSize;
 			return oldLastPosition;
 		}
 
@@ -512,15 +521,30 @@ public class ReduceHashTable<T> {
 		 * @throws IOException
 		 */
 		public long appendPointerAndRecord(long pointer, T record) throws IOException {
-			setWritePosition(lastPosition);
-			final long oldLastPosition = lastPosition;
+			setWritePosition(appendPosition);
+			return noSeekAppendPointerAndRecord(pointer, record);
+		}
+
+		/**
+		 * Appends a pointer and a record. This function only works, if the write position is at the end,
+		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
+		 * @param record The record to write
+		 * @return A pointer to the written data
+		 * @throws IOException
+		 */
+		public long noSeekAppendPointerAndRecord(long pointer, T record) throws IOException {
+			final long oldLastPosition = appendPosition;
 			final long oldPositionInSegment = getCurrentPositionInSegment();
 			final long oldSegmentIndex = currentSegmentIndex;
 			writeLong(pointer);
 			serializer.serialize(record, this);
-			lastPosition += getCurrentPositionInSegment() - oldPositionInSegment +
+			appendPosition += getCurrentPositionInSegment() - oldPositionInSegment +
 				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
 			return oldLastPosition;
+		}
+
+		public long getAppendPosition() {
+			return appendPosition;
 		}
 	}
 
@@ -551,7 +575,7 @@ public class ReduceHashTable<T> {
 		@Override
 		protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
 			if (++this.currentSegmentIndex == this.segments.size()) {
-				if (freeMemory.isEmpty()) {
+				if (freeMemorySegments.isEmpty()) {
 					throw new EOFException();
 				} else {
 					this.segments.add(allocateSegment());
@@ -575,11 +599,6 @@ public class ReduceHashTable<T> {
 		public HashTableProber(TypeComparator<PT> probeTypeComparator, TypePairComparator<PT, T> pairComparator) {
 			super(probeTypeComparator, pairComparator);
 		}
-
-		/**
-		 * This value means that the prevElemPtr is "pointing to the bucket", and not into the record segments.
-		 */
-		private static final long INVALID_PREV_POINTER = -2;
 
 		private int bucketSegmentIndex;
 		private int bucketOffset;
@@ -672,6 +691,8 @@ public class ReduceHashTable<T> {
 				} else {
 					recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
 				}
+
+				recordSegmentsOutView.overwriteLongAt(curElemPtr, ABANDONED_RECORD);
 			}
 		}
 
@@ -681,13 +702,13 @@ public class ReduceHashTable<T> {
 		 * Important: The given record should have the same key as the record that was given to getMatchFor!
 		 */
 		public boolean insertAfterNoMatch(T record) throws IOException {
-//			//todo
-//			if (numElements > numBuckets) {
-//				resizeTable();
-//				insert(record);
-//				return true; // todo: vegiggondolni, hogy a return value / exception rendben van-e
-//			}
-//			//
+			//todo: tesztelni
+			if (numElements > numBuckets) {
+				resizeTable();
+				insert(record);
+				return true; // todo: vegiggondolni, hogy a return value / exception rendben van-e
+			}
+			//
 
 			// create new link
 			long pointerToAppended;

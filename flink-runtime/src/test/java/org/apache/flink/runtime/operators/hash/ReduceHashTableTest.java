@@ -86,7 +86,7 @@ public class ReduceHashTableTest {
 
 		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses (also in the segment arrays))
 		final int valueRange = 10;
-		final int numRecords = 10000000;
+		final int numRecords = 1000000; //10000000;
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -185,11 +185,13 @@ public class ReduceHashTableTest {
 		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")), "foo");
 		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")), "foo");
 		reference.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")), "alma");
-		reference.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")), "korte");
 		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")));
 		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")));
 		table.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")));
-		table.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")));
+		for (int i = 0; i < 5; i++) {
+			reference.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")), "korte");
+			table.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")));
+		}
 		reference.emit();
 		table.emit();
 
