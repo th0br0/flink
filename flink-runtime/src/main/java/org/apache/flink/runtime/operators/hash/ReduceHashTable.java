@@ -37,7 +37,41 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * todo: comment on hash table structure
+ * This hash table supports updating elements.
+ * //todo: meg irni kene kicsit a muveletekrol:
+ *   - van processWithReduce is, ami nyilvan az update-re epul
+ *   - van emit is, ami elkuldi az osszes bent levo element a collectorra, es urit
+ *
+ *
+ * The memory is divided into three areas:
+ *  - bucket area: they contain bucket heads:
+ *    an 8 byte pointer to the first link of a linked list in the record area
+ *  - record area: this contains the actual data in linked list elements.
+ *    A linked list element starts with an 8 byte pointer to the next element,
+ *    and then the record follows.
+ *  - staging area: This is a small, temporary storage area for writing updated
+ *    records. Before serializing a record, there is no way to know in advance
+ *    how large will it be. Therefore, we can't serialize directly into the
+ *    record area when we are doing an update, because if it turns out to be
+ *    larger then the old record, then it would override some other record
+ *    that happens to be after the old one in memory. The solution is to
+ *    serialize to the staging area first, and then copy it to the place of
+ *    the original if it has the same size, otherwise allocate a new linked
+ *    list element, and mark the old one as abandoned.
+ *
+ *  Compaction happens by deleting the data in the bucket area, and then reinserting all elements.
+ *  The reinsertion happens by forgetting the structure (the linked lists) of the record area, and reading it
+ *  sequentially, and inserting all non-abandoned records, starting from the beginning of the record area.
+ *  Note, that insertions never override a record that have not been read by the reinsertion sweep, because
+ *  both the insertions and readings happen sequentially in the record area, and the insertions obviously
+ *  never overtake the reading sweep.
+ *
+ *  //todo: beleirni, hogy ha update-kor csokken egy record merete, akkor is uj hely kell neki, mivel
+ *  kulonben eltevesztenem a reinsertion sweep-nel a kovetkezo record helyet.
+ *
+ *  //todo: comment, hogy a bucket segmentek mennyisege hogy alakul (kezdeti meret kiszamitasa, es resize-ok)
+ *  Meg esetleg meg komment a staging segment-ek mennyisegevel kapcsolatban.
+ *  (altalaban keves (1 db) van, de vegiggondolni, hogy nem ehet meg tul sok helyet)
  *
  */
 
@@ -77,11 +111,9 @@ public class ReduceHashTable<T> {
 
 
 	private final TypeSerializer<T> serializer;
-
 	private final TypeComparator<T> comparator;
 
 	private final ReduceFunction<T> reducer;
-
 	private final Collector<T> outputCollector;
 
 	private final boolean objectReuseEnabled;
@@ -114,7 +146,7 @@ public class ReduceHashTable<T> {
 	private final AppendableRandomAccessOutputView recordSegmentsOutView;
 
 	/**
-	 * These are the segments for the staging area, where we temporarily write a record after a reduce step,
+	 * These are the segments for the staging area, where we temporarily write a record when doing an update,
 	 * to see its size to see if it fits in the place of the old record, before writing it into recordSegments.
 	 * (It should contain at most one record at all times.)
 	 */
@@ -365,6 +397,7 @@ public class ReduceHashTable<T> {
 			}
 			recordSegmentsOutView.freeSegmentsAfterAppendPosition();
 		} catch (IOException ex) {
+			// todo: ezek a cuccok csak olyankor dobnak IOException-t, ha elfogyott a memoria, ugye? (ami pedig itt nem lehetseges)
 			throw new RuntimeException("Bug in ReduceHashTable");
 		}
 	}
