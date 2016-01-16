@@ -45,7 +45,7 @@ import java.util.List;
 
 //todo: olyan teszt is kell, amikor nem adok neki eleg memoriat
 //todo: memoria megteles kori exceptionoket/return value-kat atgondolni
-//todo: compaction, ha kifogytunk a memoriabol
+//todo: compactot meghivni, amikor kifogytunk a memoriabol
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> {
