@@ -84,9 +84,11 @@ public class ReduceHashTableTest {
 	public void testWithIntPair() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
 
-		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses (also in the segment arrays))
+		// varying the keyRange between 1000 and 1000000 can make a 5x speed difference
+		// (because of cache misses (also in the segment arrays))
+		final int keyRange = 1000000;
 		final int valueRange = 10;
-		final int numRecords = 10000000; //10000000; //todo: a vegso valtozatban kisebbre venni
+		final int numRecords = 1000000; //10000000; //todo: a vegso valtozatban kisebbre venni
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -98,11 +100,12 @@ public class ReduceHashTableTest {
 			serializer, comparator, reducer, new CopyingListCollector<>(expectedOutput, serializer));
 
 		// Create the ReduceHashTable to test
-		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use should be proportional to the number of different keys
+		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use is proportional to the number of different keys
 		List<IntPair> actualOutput = new ArrayList<>();
 
 		ReduceHashTable<IntPair> table = new ReduceHashTable<>(
-			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
+			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE),
+			new CopyingListCollector<>(actualOutput, serializer), true);
 		table.open();
 
 		// Generate some input

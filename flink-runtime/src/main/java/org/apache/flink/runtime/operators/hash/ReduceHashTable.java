@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.operators.hash;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeutils.SameTypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeComparator;
@@ -170,11 +169,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	private final int numBucketsPerSegment, numBucketsPerSegmentBits, numBucketsPerSegmentMask;
 
 	/**
-	 * These views are for the segments that hold the actual records (in linked lists).
-	 * (The ArrayList of the actual segments are inside recordSegmentsOutView.)
+	 * The segments where the actual data is stored.
 	 */
-	private final RandomAccessInputView recordSegmentsInView;
-	private final AppendableRandomAccessOutputView recordSegmentsOutView;
+	private final RecordArea recordArea;
 
 	/**
 	 * These are the segments for the staging area, where we temporarily write a record when doing an update,
@@ -224,10 +221,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		this.numBucketsPerSegmentBits = MathUtils.log2strict(this.numBucketsPerSegment);
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
 
-		ArrayList<MemorySegment> recordSegments = new ArrayList<>();
-		recordSegments.add(allocateSegment());
-		recordSegmentsInView = new RandomAccessInputView(recordSegments, segmentSize);
-		recordSegmentsOutView = new AppendableRandomAccessOutputView(recordSegments, segmentSize);
+		recordArea = new RecordArea(segmentSize);
 
 		stagingSegments = new ArrayList<>();
 		stagingSegments.add(allocateSegment());
@@ -272,7 +266,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 		releaseBucketSegments();
 
-		recordSegmentsOutView.giveBackSegments(); // Note: recordSegmentsInView uses the same segments
+		recordArea.giveBackSegments();
 
 		freeMemorySegments.addAll(stagingSegments);
 		stagingSegments.clear();
@@ -283,7 +277,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	@Override
 	public void abort() {
 		//todo
-		throw new NotImplementedException();
+		return;
 	}
 
 	@Override
@@ -432,7 +426,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
 		final long firstPointer = bucketSegment.getLong(bucketOffset);
 
-		final long newFirstPointer = recordSegmentsOutView.appendPointerAndRecord(firstPointer, record);
+		final long newFirstPointer = recordArea.appendPointerAndRecord(firstPointer, record);
 		bucketSegment.putLong(bucketOffset, newFirstPointer);
 
 		numElements++;
@@ -465,13 +459,13 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 */
 	private void rebuild() {
 		try {
-			recordSegmentsInView.setReadPosition(0);
-			final long oldAppendPosition = recordSegmentsOutView.getAppendPosition();
-			recordSegmentsOutView.resetAppendPosition();
-			recordSegmentsOutView.setWritePosition(0);
-			while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
-				final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
-				T record = buildSideSerializer.deserialize(reuse, recordSegmentsInView);
+			recordArea.setReadPosition(0);
+			final long oldAppendPosition = recordArea.getAppendPosition();
+			recordArea.resetAppendPosition();
+			recordArea.setWritePosition(0);
+			while (recordArea.getReadPosition() < oldAppendPosition) {
+				final boolean isAbandoned = recordArea.readLong() == ABANDONED_RECORD;
+				T record = recordArea.readRecord(reuse);
 
 				if (!isAbandoned) {
 					// Insert into table
@@ -483,11 +477,11 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 					final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
 					final long firstPointer = bucketSegment.getLong(bucketOffset);
 
-					long ptrToAppended = recordSegmentsOutView.noSeekAppendPointerAndRecord(firstPointer, record);
+					long ptrToAppended = recordArea.noSeekAppendPointerAndRecord(firstPointer, record);
 					bucketSegment.putLong(bucketOffset, ptrToAppended);
 				}
 			}
-			recordSegmentsOutView.freeSegmentsAfterAppendPosition();
+			recordArea.freeSegmentsAfterAppendPosition();
 		} catch (IOException ex) {
 			// todo: ezek a cuccok csak olyankor dobnak IOException-t, ha elfogyott a memoria, ugye? (ami pedig itt nem lehetseges)
 			//   ja, nem biztos, hoppa, todo: rendbetenni
@@ -505,11 +499,11 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * Emits all elements currently held by the table to the collector, and resets the table.
 	 */
 	public void emit() throws IOException {
-		recordSegmentsInView.setReadPosition(0);
-		final long oldAppendPosition = recordSegmentsOutView.getAppendPosition();
-		while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
-			final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
-			T record = buildSideSerializer.deserialize(reuse, recordSegmentsInView);
+		recordArea.setReadPosition(0);
+		final long oldAppendPosition = recordArea.getAppendPosition();
+		while (recordArea.getReadPosition() < oldAppendPosition) {
+			final boolean isAbandoned = recordArea.readLong() == ABANDONED_RECORD;
+			T record = recordArea.readRecord(reuse);
 			if (!isAbandoned) {
 				outputCollector.collect(record);
 				if (!objectReuseEnabled) { //todo: vegiggondolni, hogy ez ide kell-e
@@ -521,50 +515,67 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 
 	/**
-	 * An OutputView that
+	 * This class encapsulates the memory segments that belong to the record area. It
 	 *  - can append a record
-	 *  - can write a record to an arbitrary position (WARNING: the new record must not be larger than the old one)
+	 *  - can overwrite a record at an arbitrary position (WARNING: the new record must have the same size
+	 *    as the old one)
 	 *  - can be rewritten by calling resetAppendPosition
 	 *  - takes memory from ReduceHashTable.freeMemorySegments on append
-	 * WARNING: Do not call the write* methods of AbstractPagedOutputView directly when the write position is at the end,
-	 * because appendPosition has to be modified when appending data.
 	 */
-	private final class AppendableRandomAccessOutputView extends AbstractPagedOutputView
+	private final class RecordArea
 	{
-		private final ArrayList<MemorySegment> segments; //WARNING: recordSegmentsInView also has a ref to this object
+		private final ArrayList<MemorySegment> segments = new ArrayList<>();
+
+		private final OutputView outView;
+		private final RandomAccessInputView inView;
 
 		private final int segmentSizeBits;
 		private final int segmentSizeMask;
 
-		private int currentSegmentIndex;
-
 		private long appendPosition = 0;
 
 
-		public AppendableRandomAccessOutputView(ArrayList<MemorySegment> segments, int segmentSize) {
-			this(segments, segmentSize, MathUtils.log2strict(segmentSize));
+		private final class OutputView extends AbstractPagedOutputView {
+
+			public int currentSegmentIndex;
+
+			public OutputView(int segmentSize) {
+				super(segmentSize, 0);
+			}
+
+			@Override
+			protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
+				this.currentSegmentIndex++;
+				if (this.currentSegmentIndex == segments.size()) {
+					addSegment();
+				}
+				return segments.get(this.currentSegmentIndex);
+			}
+
+			@Override
+			public void seekOutput(MemorySegment seg, int position) {
+				super.seekOutput(seg, position);
+			}
 		}
 
-		public AppendableRandomAccessOutputView(ArrayList<MemorySegment> segments, int segmentSize, int segmentSizeBits) {
-			super(segmentSize, 0);
+
+		public RecordArea(int segmentSize) {
+			this(segmentSize, MathUtils.log2strict(segmentSize));
+		}
+
+		public RecordArea(int segmentSize, int segmentSizeBits) {
 
 			if ((segmentSize & (segmentSize - 1)) != 0) {
 				throw new IllegalArgumentException("Segment size must be a power of 2!");
 			}
 
-			this.segments = segments;
 			this.segmentSizeBits = segmentSizeBits;
 			this.segmentSizeMask = segmentSize - 1;
+
+			outView = new OutputView(segmentSize);
+			inView = new RandomAccessInputView(segments, segmentSize);
 		}
 
-		@Override
-		protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
-			this.currentSegmentIndex++;
-			if (this.currentSegmentIndex == this.segments.size()) {
-				addSegment();
-			}
-			return this.segments.get(this.currentSegmentIndex);
-		}
 
 		private void addSegment() throws EOFException {
 			MemorySegment m = allocateSegment();
@@ -573,6 +584,20 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			}
 			this.segments.add(m);
 		}
+
+		/**
+		 * Moves all its memory segments to freeMemorySegments.
+		 * Warning: this will leave the RecordArea in an unwritable state: you have to
+		 * call setWritePosition before writing again.
+		 */
+		public void giveBackSegments() {
+			freeMemorySegments.addAll(segments);
+			segments.clear();
+
+			resetAppendPosition();
+		}
+
+		// ----------------------- Output -----------------------
 
 		private void setWritePosition(long position) throws EOFException {
 			if (position > appendPosition) {
@@ -588,38 +613,33 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				addSegment();
 			}
 
-			this.currentSegmentIndex = segmentIndex;
-			seekOutput(this.segments.get(segmentIndex), offset);
-		}
-
-		/**
-		 * Moves all its memory segments to freeMemorySegments.
-		 * Warning: this will be in an unwritable state after this call: you have to
-		 * call setWritePosition before writing again.
-		 */
-		public void giveBackSegments() {
-			freeMemorySegments.addAll(segments);
-			segments.clear();
-
-			resetAppendPosition();
+			outView.currentSegmentIndex = segmentIndex;
+			outView.seekOutput(this.segments.get(segmentIndex), offset);
 		}
 
 		/**
 		 * Sets appendPosition and the write position to 0, so that appending starts
 		 * overwriting elements from the beginning. (This is used in rebuild.)
+		 *
 		 * Note: if data was written to the area after the current appendPosition
-		 * (before a call to resetAppendPosition), it should still be readable.
+		 * before a call to resetAppendPosition, it should still be readable. To
+		 * release the segments after the current append position, call
+		 * freeSegmentsAfterAppendPosition()
 		 */
 		public void resetAppendPosition() {
 			appendPosition = 0;
 
 			// this is just for safety (making sure that we fail immediately
 			// if a write happens without calling setWritePosition)
-			this.currentSegmentIndex = -1;
-			seekOutput(null, -1);
+			outView.currentSegmentIndex = -1;
+			outView.seekOutput(null, -1);
 		}
 
-		//todo: comment
+		/**
+		 * Releases the memory segments that are after the current append position.
+		 * Note: The situation that there are segments after the current append position
+		 * can arise from a call to resetAppendPosition().
+		 */
 		public void freeSegmentsAfterAppendPosition() {
 			final int appendSegmentIndex = (int)(appendPosition >>> this.segmentSizeBits);
 			while (segments.size() > appendSegmentIndex + 1) {
@@ -636,7 +656,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 */
 		public void overwriteLongAt(long pointer, long value) throws IOException {
 			setWritePosition(pointer);
-			writeLong(value);
+			outView.writeLong(value);
 		}
 
 		/**
@@ -649,7 +669,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 */
 		public void overwriteRecordAt(long pointer, DataInputView input, int size) throws IOException {
 			setWritePosition(pointer);
-			write(input, size);
+			outView.write(input, size);
 		}
 
 		/**
@@ -663,8 +683,8 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		public long appendPointerAndCopyRecord(long pointer, DataInputView input, int recordSize) throws IOException {
 			setWritePosition(appendPosition);
 			final long oldLastPosition = appendPosition;
-			writeLong(pointer);
-			write(input, recordSize);
+			outView.writeLong(pointer);
+			outView.write(input, recordSize);
 			appendPosition += 8 + recordSize;
 			return oldLastPosition;
 		}
@@ -682,7 +702,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		}
 
 		/**
-		 * Appends a pointer and a record. This function only works, if the write position is at the end,
+		 * Appends a pointer and a record. Call this function only if the write position is at the end!
 		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
 		 * @param record The record to write
 		 * @return A pointer to the written data
@@ -690,17 +710,35 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 */
 		public long noSeekAppendPointerAndRecord(long pointer, T record) throws IOException {
 			final long oldLastPosition = appendPosition;
-			final long oldPositionInSegment = getCurrentPositionInSegment();
-			final long oldSegmentIndex = currentSegmentIndex;
-			writeLong(pointer);
-			buildSideSerializer.serialize(record, this);
-			appendPosition += getCurrentPositionInSegment() - oldPositionInSegment +
-				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
+			final long oldPositionInSegment = outView.getCurrentPositionInSegment();
+			final long oldSegmentIndex = outView.currentSegmentIndex;
+			outView.writeLong(pointer);
+			buildSideSerializer.serialize(record, outView);
+			appendPosition += outView.getCurrentPositionInSegment() - oldPositionInSegment +
+				outView.getSegmentSize() * (outView.currentSegmentIndex - oldSegmentIndex);
 			return oldLastPosition;
 		}
 
 		public long getAppendPosition() {
 			return appendPosition;
+		}
+
+		// ----------------------- Input -----------------------
+
+		public void setReadPosition(long position) {
+			inView.setReadPosition(position);
+		}
+
+		public long getReadPosition() {
+			return inView.getReadPosition();
+		}
+
+		public long readLong() throws IOException {
+			return inView.readLong();
+		}
+
+		public T readRecord(T reuse) throws IOException {
+			return buildSideSerializer.deserialize(reuse, inView);
 		}
 	}
 
@@ -786,10 +824,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			prevElemPtr = INVALID_PREV_POINTER;
 			try {
 				while (curElemPtr != END_OF_LIST) {
-					recordSegmentsInView.setReadPosition(curElemPtr);
-					nextPtr = recordSegmentsInView.readLong();
+					recordArea.setReadPosition(curElemPtr);
+					nextPtr = recordArea.readLong();
 
-					currentRecordInList = buildSideSerializer.deserialize(currentRecordInList, recordSegmentsInView);
+					currentRecordInList = recordArea.readRecord(currentRecordInList);
 					if (pairComparator.equalToReference(currentRecordInList)) {
 						// we found an element with a matching key, and not just a hash collision
 						return currentRecordInList;
@@ -825,28 +863,28 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			stagingSegmentsInView.setReadPosition(0);
 
 			// Determine the size of the place of the old record.
-			final int oldRecordSize = (int)(recordSegmentsInView.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
+			final int oldRecordSize = (int)(recordArea.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
 
 			if (newRecordSize == oldRecordSize) {
 				// overwrite record at its original place
-				recordSegmentsOutView.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
+				recordArea.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
 			} else {
 				// new record has a different size than the old one, append new at end of recordSegments.
 				// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know the size of this
 				// place during the compaction, and wouldn't know where does the next record start.
 
 				final long pointerToAppended =
-					recordSegmentsOutView.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
+					recordArea.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
 
 				// modify the pointer in the previous link
 				if (prevElemPtr == INVALID_PREV_POINTER) {
 					// list had only one element, so prev is in the bucketSegments
 					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 				} else {
-					recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
+					recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
 				}
 
-				recordSegmentsOutView.overwriteLongAt(curElemPtr, ABANDONED_RECORD);
+				recordArea.overwriteLongAt(curElemPtr, ABANDONED_RECORD);
 			}
 		}
 
@@ -859,7 +897,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			// create new link
 			long pointerToAppended;
 			try {
-				pointerToAppended = recordSegmentsOutView.appendPointerAndRecord(END_OF_LIST ,record);
+				pointerToAppended = recordArea.appendPointerAndRecord(END_OF_LIST ,record);
 			} catch (IOException ex) {
 				return false; // we have run out of memory
 			}
@@ -871,7 +909,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			} else {
 				// update the pointer of the last element of the list.
 				try {
-					recordSegmentsOutView.overwriteLongAt(prevElemPtr, pointerToAppended);
+					recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
 				} catch (IOException ex) {
 					throw new RuntimeException("Bug in ReduceHashTable");
 				}

@@ -45,9 +45,12 @@ public class RandomAccessInputView extends AbstractPagedInputView implements See
 	{
 		this(segments, segmentSize, segmentSize);
 	}
-	
+
+	/**
+	 * Warning: setReadPosition has to be called before reading.
+	 */
 	public RandomAccessInputView(ArrayList<MemorySegment> segments, int segmentSize, int limitInLastSegment) {
-		super(segments.get(0), segments.size() > 1 ? segmentSize : limitInLastSegment, 0);
+		super(0);
 		this.segments = segments;
 		this.currentSegmentIndex = 0;
 		this.segmentSize = segmentSize;
