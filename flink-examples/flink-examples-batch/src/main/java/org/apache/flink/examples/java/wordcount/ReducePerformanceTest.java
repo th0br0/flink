@@ -34,6 +34,7 @@ public class ReducePerformanceTest {
 	public static void main(String[] args) throws Exception {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+		//env.getConfig().enableObjectReuse();
 		//env.setParallelism(4); ////
 
 		UnsortedGrouping<Tuple2<Integer, Integer>> input =

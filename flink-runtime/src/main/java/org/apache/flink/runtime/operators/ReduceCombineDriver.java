@@ -19,6 +19,7 @@
 
 package org.apache.flink.runtime.operators;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.List;
 
@@ -120,6 +121,13 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				this.taskContext.getTaskConfig().getRelativeMemoryDriver());
 		this.memory = memManager.allocatePages(this.taskContext.getOwningNepheleTask(), numMemoryPages);
 
+		ExecutionConfig executionConfig = taskContext.getExecutionConfig();
+		this.objectReuseEnabled = executionConfig.isObjectReuseEnabled();
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("ReduceCombineDriver object reuse: " + (this.objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
+		}
+
 		switch (strategy) {
 			case SORTED_PARTIAL_REDUCE:
 				// instantiate a fix-length in-place sorter, if possible, otherwise the out-of-place sorter
@@ -135,13 +143,6 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				break;
 			default:
 				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
-		}
-
-		ExecutionConfig executionConfig = taskContext.getExecutionConfig();
-		this.objectReuseEnabled = executionConfig.isObjectReuseEnabled();
-
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("ReduceCombineDriver object reuse: " + (this.objectReuseEnabled ? "ENABLED" : "DISABLED") + ".");
 		}
 	}
 
@@ -205,35 +206,25 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 					T value = serializer.createInstance();
 
 					while (running && (value = in.next(value)) != null) {
-
-						// try writing to the hash table first
-						if (this.table.processRecordWithReduce(value)) {
-							continue;
-						}
-
-						// memory is full. emit current aggregates and reset the table.
-						table.emitAndReset();
-
-						// write the value again
-						if (!this.table.processRecordWithReduce(value)) {
-							throw new IOException("Cannot write record to fresh hash table.");
+						try {
+							table.processRecordWithReduce(value);
+						} catch (EOFException ex) {
+							// the table has run out of memory
+							table.emitAndReset();
+							// try again
+							this.table.processRecordWithReduce(value);
 						}
 					}
 				} else {
 					T value;
 					while (running && (value = in.next()) != null) {
-
-						// try writing to the hash table first
-						if (this.table.processRecordWithReduce(value)) {
-							continue;
-						}
-
-						// memory is full. emit current aggregates and reset the table.
-						table.emitAndReset();
-
-						// write the value again
-						if (!this.table.processRecordWithReduce(value)) {
-							throw new IOException("Cannot write record to fresh hash table.");
+						try {
+							table.processRecordWithReduce(value);
+						} catch (EOFException ex) {
+							// the table has run out of memory
+							table.emitAndReset();
+							// try again
+							this.table.processRecordWithReduce(value);
 						}
 					}
 				}
@@ -327,6 +318,9 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 		if (this.sorter != null) {
 			this.sorter.dispose();
 		}
+		if (table != null) {
+			table.close();
+		}
 		this.taskContext.getMemoryManager().release(this.memory);
 	}
 
@@ -335,7 +329,12 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 		this.running = false;
 		
 		try {
-			this.sorter.dispose();
+			if (sorter != null) {
+				this.sorter.dispose();
+			}
+			if (table != null) {
+				table.close();
+			}
 		}
 		catch (Exception e) {
 			// may happen during concurrent modifications

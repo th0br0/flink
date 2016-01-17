@@ -40,11 +40,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * This hash table supports updating elements.
- * //todo: meg irni kene kicsit a muveletekrol:
- *   - van processRecordWithReduce is, ami nyilvan az update-re epul
- *   - van emit is, ami elkuldi az osszes bent levo element a collectorra, es urit
- *
+ * This hash table supports updating elements, and it also has processRecordWithReduce,
+ * which makes one reduce step with the given record.
  *
  * The memory is divided into three areas:
  *  - Bucket area: they contain bucket heads:
@@ -79,16 +76,8 @@ import java.util.List;
  *  one record.
  */
 
-//todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
-
-//todo: olyan teszt is kell, amikor nem adok neki eleg memoriat
-//todo: memoria megteles kori exceptionoket/return value-kat atgondolni
-//todo: compactot meghivni, amikor kifogytunk a memoriabol
-	// EOFException-t kell figyelni (ld. AppendableRandomAccessOutputView.addSegment)
 
 //todo: majd meg kell gondolni, hogy akarjuk-e a ReducePerformanceTest-et berakni a git-be, vagy csak rakjam el magamnak mashova
-
-//todo: minden exception elkapas utani "Bug in ReduceHashTable" exception dobast atgondolni
 
 //todo: a HashTablePerformanceComparison-ben mostmar ki lehetne emelni a ket AbstractMutableHashTable
 //teszteleset egy fv-be, es a ket tesztbol kulonbozo parameterekkel meghivni
@@ -97,7 +86,7 @@ import java.util.List;
 //todo: kene egy teszt nagy recordokkal (azaz amikor pl. a staging area tobb mint egy segmentet foglal)
 
 //todo: at kene nezni a CompactingHashTableTest-et, hatha van benne valami erdekes
-	//vagy akar valahogy lehetne egyesiteni az en tezstemmel, hogy mindket osztalyt tesztelje egyszerre
+	//vagy akar valahogy lehetne egyesiteni az en tesztemmel, hogy mindket osztalyt tesztelje egyszerre
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
@@ -141,7 +130,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 	/**
 	 * This initially contains all the memory we have, and then segments
-	 * are taken from it by bucketSegments and recordSegments.
+	 * are taken from it by bucketSegments and recordArea.
 	 */
 	private final ArrayList<MemorySegment> freeMemorySegments;
 
@@ -167,19 +156,21 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	private final RecordArea recordArea;
 
 	/**
-	 * These are the segments for the staging area, where we temporarily write a record when doing an update,
-	 * to see its size to see if it fits in the place of the old record, before writing it into recordSegments.
+	 * Segments for the staging area.
 	 * (It should contain at most one record at all times.)
 	 */
 	private final ArrayList<MemorySegment> stagingSegments;
 	private final RandomAccessInputView stagingSegmentsInView;
 	private final StagingOutputView stagingSegmentsOutView;
 
-	private long numElements = 0;
-
 	private T reuse;
 
 	private final HashTableProber<T> prober;
+
+	private long numElements = 0;
+
+	/** The number of bytes wasted by updates that couldn't overwrite the old record. */
+	private long holes = 0;
 
 	/**
 	 * If the serializer knows the size of the records, then we can calculate the optimal number of buckets
@@ -226,11 +217,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		enableResize = buildSideSerializer.getLength() == -1;
 	}
 
-	/**
-	 * Initialize the hash table
-	 */
-	@Override
-	public void open() {
+	private void open(int numBucketSegments) {
 		synchronized (stateLock) {
 			if (!closed) {
 				throw new IllegalStateException("currently not closed.");
@@ -238,11 +225,19 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			closed = false;
 		}
 
-		allocateBucketSegments(calcInitialNumBucketSegments());
+		allocateBucketSegments(numBucketSegments);
 
 		stagingSegments.add(allocateSegment());
 
 		reuse = buildSideSerializer.createInstance();
+	}
+
+	/**
+	 * Initialize the hash table
+	 */
+	@Override
+	public void open() {
+		open(calcInitialNumBucketSegments());
 	}
 
 	@Override
@@ -265,6 +260,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		stagingSegments.clear();
 
 		numElements = 0;
+		holes = 0;
 	}
 
 	@Override
@@ -311,7 +307,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 					"called in a way that there is enough free memory.");
 			}
 			// Init all pointers in all buckets to END_OF_LIST
-			for(int j = 0; j < this.numBucketsPerSegment; j++) {
+			for(int j = 0; j < numBucketsPerSegment; j++) {
 				bucketSegments[i].putLong(j << bucketSizeBits, END_OF_LIST);
 			}
 		}
@@ -325,9 +321,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	}
 
 	private MemorySegment allocateSegment() {
-		int s = this.freeMemorySegments.size();
+		int s = freeMemorySegments.size();
 		if (s > 0) {
-			return this.freeMemorySegments.remove(s - 1);
+			return freeMemorySegments.remove(s - 1);
 		} else {
 			return null;
 		}
@@ -350,34 +346,27 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	}
 
 	/**
-	 * Searches the hash table for the record with matching key, and updates it (makes one reduce step) if found,
+	 * Searches the hash table for the record with matching key, and updates it (making one reduce step) if found,
 	 * otherwise inserts a new entry.
 	 *
 	 * (If there are multiple entries with the same key, then it will update one of them.)
 	 *
 	 * @param record The record to be processed.
-	 * @return A boolean that signals whether the operation succeded, or we have run out of memory.
 	 */
-	public boolean processRecordWithReduce(T record) throws Exception {
+	public void processRecordWithReduce(T record) throws Exception {
 		T match = prober.getMatchFor(record, reuse);
 		if (match == null) {
-			return prober.insertAfterNoMatch(record);
+			prober.insertAfterNoMatch(record);
 		} else {
 			// do the reduce step
 			T res = reducer.reduce(match, record);
 
 			// We have given this.reuse to the reducer UDF, so create new one if object reuse is disabled
 			if (!objectReuseEnabled) {
-				this.reuse = buildSideSerializer.createInstance();
+				reuse = buildSideSerializer.createInstance();
 			}
 
-			try {
-				prober.updateMatch(res);
-			} catch (IOException ex) {
-				// We have run out of memory
-				return false;
-			}
-			return true;
+			prober.updateMatch(res);
 		}
 	}
 
@@ -386,8 +375,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * If it is found, then it is overridden with the specified record.
 	 * Otherwise, the specified record is inserted.
 	 * @param record The record to insert or to replace with.
-	 * @throws IOException //todo
+	 * @throws IOException (EOFException specifically, if memory ran out)
      */
+	@Override
 	public void insertOrReplaceRecord(T record) throws IOException {
 		T match = prober.getMatchFor(record, reuse);
 		if (match == null) {
@@ -401,8 +391,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * Inserts the given record into the hash table.
 	 * Note: this method doesn't care about whether a record with the same key is already present.
 	 * @param record The record to insert.
-	 * @throws IOException //todo
+	 * @throws IOException (EOFException specifically, if memory ran out)
      */
+	@Override
 	public void insert(T record) throws IOException {
 		final int hashCode = hash(buildSideComparator.hash(record));
 		final int bucket = hashCode & numBucketsMask;
@@ -411,15 +402,21 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
 		final long firstPointer = bucketSegment.getLong(bucketOffset);
 
-		final long newFirstPointer = recordArea.appendPointerAndRecord(firstPointer, record);
-		bucketSegment.putLong(bucketOffset, newFirstPointer);
+		try {
+			final long newFirstPointer = recordArea.appendPointerAndRecord(firstPointer, record);
+			bucketSegment.putLong(bucketOffset, newFirstPointer);
+		} catch (EOFException ex) {
+			compactOrThrow();
+			insert(record);
+			return;
+		}
 
 		numElements++;
 		resizeTableIfNecessary();
 	}
 
 	//todo: comment
-	private void resizeTableIfNecessary() {
+	private void resizeTableIfNecessary() throws IOException {
 		if (enableResize && numElements > numBuckets) {
 			final long newNumBucketSegments = 2L * bucketSegments.length;
 			// Checks:
@@ -430,9 +427,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				newNumBucketSegments - bucketSegments.length < freeMemorySegments.size() &&
 				newNumBucketSegments < numAllMemorySegments / 2) {
 				// do the resize
-				releaseBucketSegments();
-				allocateBucketSegments((int)newNumBucketSegments);
-				rebuild();
+				rebuild(newNumBucketSegments);
 			}
 		}
 	}
@@ -479,47 +474,72 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * reads all records from the record segments (sequentially, without using the pointers or the buckets),
 	 * and rebuilds the hash table.
 	 */
-	private void rebuild() {
+	private void rebuild() throws IOException {
+		rebuild(bucketSegments.length);
+	}
+
+	/** Same as above, but the number of bucket segments of the new table can be specified. */
+	private void rebuild(long newNumBucketSegments) throws IOException {
+		// Get new bucket segments
+		releaseBucketSegments();
+		allocateBucketSegments((int)newNumBucketSegments);
+
+		T record = buildSideSerializer.createInstance();
 		try {
+			EntryIterator iter = getEntryIterator();
 			recordArea.resetAppendPosition();
 			recordArea.setWritePosition(0);
-			EntryIterator iter = getEntryIterator();
-			while ((reuse = iter.next(reuse)) != null) {
-				final int hashCode = hash(buildSideComparator.hash(reuse));
+			while ((record = iter.next(record)) != null) {
+				final int hashCode = hash(buildSideComparator.hash(record));
 				final int bucket = hashCode & numBucketsMask;
 				final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 				final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
 				final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
 				final long firstPointer = bucketSegment.getLong(bucketOffset);
 
-				long ptrToAppended = recordArea.noSeekAppendPointerAndRecord(firstPointer, reuse);
+				long ptrToAppended = recordArea.noSeekAppendPointerAndRecord(firstPointer, record);
 				bucketSegment.putLong(bucketOffset, ptrToAppended);
 			}
 			recordArea.freeSegmentsAfterAppendPosition();
+			holes = 0;
 
-		} catch (IOException ex) {
-			// todo: ezek a cuccok csak olyankor dobnak IOException-t, ha elfogyott a memoria, ugye? (ami pedig itt nem lehetseges)
-			//   ja, nem biztos, hoppa, todo: rendbetenni
-			throw new RuntimeException("Bug in ReduceHashTable");
+		} catch (EOFException ex) {
+			throw new RuntimeException("Bug in ReduceHashTable: we shouldn't get out of memory during a rebuild, " +
+				"because we aren't allocating any new memory.");
 		}
 	}
 
 	public void emitAndReset() throws IOException {
+		final int oldNumBucketSegments = bucketSegments.length;
 		emit();
 		close();
-		open();
+		open(oldNumBucketSegments);
 	}
 
 	/**
 	 * Emits all elements currently held by the table to the collector, and resets the table.
 	 */
 	public void emit() throws IOException {
+		T record = buildSideSerializer.createInstance();
 		EntryIterator iter = getEntryIterator();
-		while ((reuse = iter.next(reuse)) != null) {
-			outputCollector.collect(reuse);
+		while ((record = iter.next(record)) != null) {
+			outputCollector.collect(record);
 			if (!objectReuseEnabled) {
-				reuse = buildSideSerializer.createInstance();
+				record = buildSideSerializer.createInstance();
 			}
+		}
+	}
+
+	/**
+	 * If there is wasted space due to updates records not fitting in their old places, then do a compaction.
+	 * Else, throw EOFException to indicate that memory ran out.
+	 * @throws IOException
+	 */
+	private void compactOrThrow() throws IOException {
+		if (holes > 0) {
+			rebuild();
+		} else {
+			throw new EOFException();
 		}
 	}
 
@@ -555,11 +575,11 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 			@Override
 			protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
-				this.currentSegmentIndex++;
-				if (this.currentSegmentIndex == segments.size()) {
+				currentSegmentIndex++;
+				if (currentSegmentIndex == segments.size()) {
 					addSegment();
 				}
-				return segments.get(this.currentSegmentIndex);
+				return segments.get(currentSegmentIndex);
 			}
 
 			@Override
@@ -592,7 +612,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			if (m == null) {
 				throw new EOFException();
 			}
-			this.segments.add(m);
+			segments.add(m);
 		}
 
 		/**
@@ -614,8 +634,8 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				throw new IndexOutOfBoundsException();
 			}
 
-			final int segmentIndex = (int) (position >>> this.segmentSizeBits);
-			final int offset = (int) (position & this.segmentSizeMask);
+			final int segmentIndex = (int) (position >>> segmentSizeBits);
+			final int offset = (int) (position & segmentSizeMask);
 
 			// If position == appendPosition and the last buffer is full,
 			// then we will be seeking to the beginning of a new segment
@@ -624,7 +644,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			}
 
 			outView.currentSegmentIndex = segmentIndex;
-			outView.seekOutput(this.segments.get(segmentIndex), offset);
+			outView.seekOutput(segments.get(segmentIndex), offset);
 		}
 
 		/**
@@ -688,7 +708,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 * @param input The DataInputView to read the record from
 		 * @param recordSize The size of the record
 		 * @return A pointer to the written data
-		 * @throws IOException
+		 * @throws IOException (EOFException specifically, if memory ran out)
 		 */
 		public long appendPointerAndCopyRecord(long pointer, DataInputView input, int recordSize) throws IOException {
 			setWritePosition(appendPosition);
@@ -704,7 +724,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
 		 * @param record The record to write
 		 * @return A pointer to the written data
-		 * @throws IOException
+		 * @throws IOException (EOFException specifically, if memory ran out)
 		 */
 		public long appendPointerAndRecord(long pointer, T record) throws IOException {
 			setWritePosition(appendPosition);
@@ -716,7 +736,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 * @param pointer The pointer to write (Note: this is NOT the position to write to!)
 		 * @param record The record to write
 		 * @return A pointer to the written data
-		 * @throws IOException
+		 * @throws IOException (EOFException specifically, if memory ran out)
 		 */
 		public long noSeekAppendPointerAndRecord(long pointer, T record) throws IOException {
 			final long oldLastPosition = appendPosition;
@@ -778,18 +798,19 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 		@Override
 		protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
-			if (++this.currentSegmentIndex == this.segments.size()) {
-				if (freeMemorySegments.isEmpty()) {
+			currentSegmentIndex++;
+			if (currentSegmentIndex == segments.size()) {
+				MemorySegment m = allocateSegment();
+				if (m == null) {
 					throw new EOFException();
-				} else {
-					this.segments.add(allocateSegment());
 				}
+				segments.add(m);
 			}
-			return this.segments.get(this.currentSegmentIndex);
+			return segments.get(currentSegmentIndex);
 		}
 
 		public long getWritePosition() {
-			return (((long) this.currentSegmentIndex) << this.segmentSizeBits) + getCurrentPositionInSegment();
+			return (((long) currentSegmentIndex) << segmentSizeBits) + getCurrentPositionInSegment();
 		}
 	}
 
@@ -847,8 +868,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 					curElemPtr = nextPtr;
 				}
 			} catch (IOException ex) {
-				// todo: lehet, hogy ez megse feltetlen egy itteni bug-ot jelez, ld. deserialize javadocja
-				throw new RuntimeException("Bug in ReduceHashTable", ex);
+				throw new RuntimeException("Error deserializing record from the hashtable: " + ex.getMessage(), ex);
 			}
 			return null;
 		}
@@ -857,8 +877,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 * This method can be called after getMatchFor returned a match.
 		 * It will overwrite the record that was found by getMatchFor.
 		 * Warning: The new record should have the same key as the old!
+		 * WARNING; Don't do any modifications to the table between
+		 * getMatchFor and updateMatch!
 		 * @param newRecord The record to override the old record with.
-		 * @throws IOException
+		 * @throws IOException (EOFException specifically, if memory ran out)
          */
 		@Override
 		public void updateMatch(T newRecord) throws IOException {
@@ -866,50 +888,63 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				throw new RuntimeException("updateMatch was called after getMatchFor returned no match");
 			}
 
-			// determine the new size
-			stagingSegmentsOutView.reset();
-			buildSideSerializer.serialize(newRecord, stagingSegmentsOutView);
-			final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
-			stagingSegmentsInView.setReadPosition(0);
+			try {
+				// determine the new size
+				stagingSegmentsOutView.reset();
+				buildSideSerializer.serialize(newRecord, stagingSegmentsOutView);
+				final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
+				stagingSegmentsInView.setReadPosition(0);
 
-			// Determine the size of the place of the old record.
-			final int oldRecordSize = (int)(recordArea.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
+				// Determine the size of the place of the old record.
+				final int oldRecordSize = (int)(recordArea.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
 
-			if (newRecordSize == oldRecordSize) {
-				// overwrite record at its original place
-				recordArea.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
-			} else {
-				// new record has a different size than the old one, append new at end of recordSegments.
-				// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know the size of this
-				// place during the compaction, and wouldn't know where does the next record start.
-
-				final long pointerToAppended =
-					recordArea.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
-
-				// modify the pointer in the previous link
-				if (prevElemPtr == INVALID_PREV_POINTER) {
-					// list had only one element, so prev is in the bucketSegments
-					bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
+				if (newRecordSize == oldRecordSize) {
+					// overwrite record at its original place
+					recordArea.overwriteRecordAt(curElemPtr + RECORD_OFFSET_IN_LINK, stagingSegmentsInView, newRecordSize);
 				} else {
-					recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
-				}
+					// new record has a different size than the old one, append new at the end of the record area.
+					// Note: we have to do this, even if the new record is smaller, because otherwise we wouldn't know
+					// the size of this place during the compaction, and wouldn't know where does the next record start.
 
-				recordArea.overwriteLongAt(curElemPtr, ABANDONED_RECORD);
+					final long pointerToAppended =
+						recordArea.appendPointerAndCopyRecord(nextPtr, stagingSegmentsInView, newRecordSize);
+
+					// modify the pointer in the previous link
+					if (prevElemPtr == INVALID_PREV_POINTER) {
+						// list had only one element, so prev is in the bucketSegments
+						bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
+					} else {
+						recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
+					}
+
+					recordArea.overwriteLongAt(curElemPtr, ABANDONED_RECORD);
+
+					holes += oldRecordSize;
+				}
+			} catch (EOFException ex) {
+				compactOrThrow();
+				insertOrReplaceRecord(newRecord);
 			}
 		}
 
 		/**
 		 * This method can be called after getMatchFor returned null.
 		 * It inserts the given record to the hash table.
-		 * Important: The given record should have the same key as the record that was given to getMatchFor!
+		 * Important: The given record should have the same key as the record
+		 * that was given to getMatchFor!
+		 * WARNING; Don't do any modifications to the table between
+		 * getMatchFor and insertAfterNoMatch!
+		 * @throws IOException (EOFException specifically, if memory ran out)
 		 */
-		public boolean insertAfterNoMatch(T record) {
+		public void insertAfterNoMatch(T record) throws IOException {
 			// create new link
 			long pointerToAppended;
 			try {
 				pointerToAppended = recordArea.appendPointerAndRecord(END_OF_LIST ,record);
-			} catch (IOException ex) {
-				return false; // we have run out of memory
+			} catch (EOFException ex) {
+				compactOrThrow();
+				insert(record);
+				return;
 			}
 
 			// add new link to the end of the list
@@ -918,17 +953,11 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				bucketSegments[bucketSegmentIndex].putLong(bucketOffset, pointerToAppended);
 			} else {
 				// update the pointer of the last element of the list.
-				try {
-					recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
-				} catch (IOException ex) {
-					throw new RuntimeException("Bug in ReduceHashTable");
-				}
+				recordArea.overwriteLongAt(prevElemPtr, pointerToAppended);
 			}
 
 			numElements++;
 			resizeTableIfNecessary();
-
-			return true;
 		}
 	}
 }

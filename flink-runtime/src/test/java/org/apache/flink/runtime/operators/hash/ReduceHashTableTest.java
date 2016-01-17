@@ -120,10 +120,7 @@ public class ReduceHashTableTest {
 		// Process the generated input
 		final int numIntermingledEmits = 5;
 		for (IntPair record: input) {
-			boolean succeeded = table.processRecordWithReduce(serializer.copy(record));
-			if (!succeeded) {
-				throw new RuntimeException("Not enough memory; set numMemPages higher");
-			}
+			table.processRecordWithReduce(serializer.copy(record));
 			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
 			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
 				// this will fire approx. numIntermingledEmits times
@@ -167,7 +164,6 @@ public class ReduceHashTableTest {
 	}
 
 
-	// todo: comment
 	@Test
 	public void testWithLengthChangingReduceFunction() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
@@ -186,7 +182,8 @@ public class ReduceHashTableTest {
 			serializer, comparator, reducer, new CopyingListCollector<>(expectedOutput, serializer));
 
 		// Create the ReduceHashTable to test
-		final int numMemPages = numRecords * 100 / PAGE_SIZE;
+		final int numMemPages = numRecords * 10 / PAGE_SIZE;
+
 		List<StringPair> actualOutput = new ArrayList<>();
 
 		ReduceHashTable<StringPair> table = new ReduceHashTable<>(
@@ -249,6 +246,9 @@ public class ReduceHashTableTest {
 			expectedValues.sort(Ordering.<String>natural());
 			actualValues.sort(Ordering.<String>natural());
 			assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
+
+			expectedOutput.clear();
+			actualOutput.clear();
 		}
 	}
 
