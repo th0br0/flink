@@ -72,7 +72,7 @@ public class ReduceHashTableTest {
 			}
 		}
 
-		public void emit() {
+		public void emitAndReset() {
 			for (T record: map.values()) {
 				outputCollector.collect(record);
 			}
@@ -86,7 +86,7 @@ public class ReduceHashTableTest {
 
 		final int keyRange = 1000000; // varying this between 1000 and 1000000 can make a 5x speed difference (because of cache misses (also in the segment arrays))
 		final int valueRange = 10;
-		final int numRecords = 10000000; //10000000;
+		final int numRecords = 10000000; //10000000; //todo: a vegso valtozatban kisebbre venni
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -100,8 +100,10 @@ public class ReduceHashTableTest {
 		// Create the ReduceHashTable to test
 		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use should be proportional to the number of different keys
 		List<IntPair> actualOutput = new ArrayList<>();
+
 		ReduceHashTable<IntPair> table = new ReduceHashTable<>(
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
+		table.open();
 
 		// Generate some input
 		final List<IntPair> input = new ArrayList<>();
@@ -122,12 +124,13 @@ public class ReduceHashTableTest {
 			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
 			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
 				// this will fire approx. numIntermingledEmits times
-				reference.emit();
-				table.emit();
+				reference.emitAndReset();
+				table.emitAndReset();
 			}
 		}
-		reference.emit();
+		reference.emitAndReset();
 		table.emit();
+		table.close();
 
 		long end = System.currentTimeMillis();
 		System.out.println("stop, time: " + (end - start)); //todo remove
@@ -161,6 +164,7 @@ public class ReduceHashTableTest {
 	}
 
 
+	// todo: comment
 	@Test
 	public void testWithLengthChangingReduceFunction() throws Exception {
 		Random rnd = new Random(RANDOM_SEED);
@@ -181,61 +185,68 @@ public class ReduceHashTableTest {
 		// Create the ReduceHashTable to test
 		final int numMemPages = numRecords * 100 / PAGE_SIZE;
 		List<StringPair> actualOutput = new ArrayList<>();
+
 		ReduceHashTable<StringPair> table = new ReduceHashTable<>(
 			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
 
-		// Process some manual stuff
-		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")), "foo");
-		reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")), "foo");
-		reference.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")), "alma");
-		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")));
-		table.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")));
-		table.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")));
-		for (int i = 0; i < 5; i++) {
-			reference.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")), "korte");
-			table.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")));
-		}
-		reference.emit();
-		table.emit();
+		// The loop is for checking the feature that multiple open / close are possible.
+		for(int j = 0; j < 3; j++) {
+			table.open();
 
-		// Generate some input
-		UniformStringPairGenerator gen = new UniformStringPairGenerator(numKeys, numVals, true);
-		List<StringPair> input = new ArrayList<>();
-		StringPair cur = new StringPair();
-		while (gen.next(cur) != null) {
-			input.add(serializer.copy(cur));
-		}
-		Collections.shuffle(input, rnd);
-
-		// Process the generated input
-		final int numIntermingledEmits = 5;
-		for (StringPair record: input) {
-			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
-			table.processRecordWithReduce(serializer.copy(record));
-			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
-				// this will fire approx. numIntermingledEmits times
-				reference.emit();
-				table.emit();
+			// Process some manual stuff
+			reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")), "foo");
+			reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")), "foo");
+			reference.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")), "alma");
+			table.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")));
+			table.processRecordWithReduce(serializer.copy(new StringPair("foo", "baz")));
+			table.processRecordWithReduce(serializer.copy(new StringPair("alma", "xyz")));
+			for (int i = 0; i < 5; i++) {
+				table.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")));
+				reference.processRecordWithReduce(serializer.copy(new StringPair("korte", "abc")), "korte");
 			}
-		}
-		reference.emit();
-		table.emit();
+			reference.emitAndReset();
+			table.emitAndReset();
 
-		// Check results
+			// Generate some input
+			UniformStringPairGenerator gen = new UniformStringPairGenerator(numKeys, numVals, true);
+			List<StringPair> input = new ArrayList<>();
+			StringPair cur = new StringPair();
+			while (gen.next(cur) != null) {
+				input.add(serializer.copy(cur));
+			}
+			Collections.shuffle(input, rnd);
 
-		assertEquals(expectedOutput.size(), actualOutput.size());
+			// Process the generated input
+			final int numIntermingledEmits = 5;
+			for (StringPair record : input) {
+				reference.processRecordWithReduce(serializer.copy(record), record.getKey());
+				table.processRecordWithReduce(serializer.copy(record));
+				if (rnd.nextDouble() < 1.0 / ((double) numRecords / numIntermingledEmits)) {
+					// this will fire approx. numIntermingledEmits times
+					reference.emitAndReset();
+					table.emitAndReset();
+				}
+			}
+			reference.emitAndReset();
+			table.emit();
+			table.close();
 
-		ArrayList<String> expectedValues = new ArrayList<>();
-		for (StringPair record: expectedOutput) {
-			expectedValues.add(record.getValue());
+			// Check results
+
+			assertEquals(expectedOutput.size(), actualOutput.size());
+
+			ArrayList<String> expectedValues = new ArrayList<>();
+			for (StringPair record : expectedOutput) {
+				expectedValues.add(record.getValue());
+			}
+			ArrayList<String> actualValues = new ArrayList<>();
+			for (StringPair record : actualOutput) {
+				actualValues.add(record.getValue());
+			}
+			expectedValues.sort(Ordering.<String>natural());
+			actualValues.sort(Ordering.<String>natural());
+			assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
 		}
-		ArrayList<String> actualValues = new ArrayList<>();
-		for (StringPair record: actualOutput) {
-			actualValues.add(record.getValue());
-		}
-		expectedValues.sort(Ordering.<String>natural());
-		actualValues.sort(Ordering.<String>natural());
-		assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
 	}
 
 	// Warning: Generally, reduce wouldn't give deterministic results with non-commutative ReduceFunction,

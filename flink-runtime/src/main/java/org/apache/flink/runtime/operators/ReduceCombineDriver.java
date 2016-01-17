@@ -200,6 +200,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 
 				break;
 			case HASHED_PARTIAL_REDUCE:
+				table.open();
 				if (objectReuseEnabled) {
 					T value = serializer.createInstance();
 
@@ -211,7 +212,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 						}
 
 						// memory is full. emit current aggregates and reset the table.
-						table.emit();
+						table.emitAndReset();
 
 						// write the value again
 						if (!this.table.processRecordWithReduce(value)) {
@@ -228,7 +229,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 						}
 
 						// memory is full. emit current aggregates and reset the table.
-						table.emit();
+						table.emitAndReset();
 
 						// write the value again
 						if (!this.table.processRecordWithReduce(value)) {
@@ -240,9 +241,10 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				// send the final batch
 				table.emit();
 
+				table.close();
 				break;
-//			default:
-//				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
+			default:
+				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");
 		}
 	}
 		

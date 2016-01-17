@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.operators.hash;
 
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeutils.SameTypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeComparator;
@@ -29,6 +30,9 @@ import org.apache.flink.runtime.io.disk.RandomAccessInputView;
 import org.apache.flink.runtime.memory.AbstractPagedOutputView;
 import org.apache.flink.runtime.util.MathUtils;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.MutableObjectIterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -39,35 +43,41 @@ import java.util.List;
 /**
  * This hash table supports updating elements.
  * //todo: meg irni kene kicsit a muveletekrol:
- *   - van processWithReduce is, ami nyilvan az update-re epul
+ *   - van processRecordWithReduce is, ami nyilvan az update-re epul
  *   - van emit is, ami elkuldi az osszes bent levo element a collectorra, es urit
  *
  *
  * The memory is divided into three areas:
- *  - bucket area: they contain bucket heads:
+ *  - Bucket area: they contain bucket heads:
  *    an 8 byte pointer to the first link of a linked list in the record area
- *  - record area: this contains the actual data in linked list elements.
- *    A linked list element starts with an 8 byte pointer to the next element,
- *    and then the record follows.
- *  - staging area: This is a small, temporary storage area for writing updated
- *    records. Before serializing a record, there is no way to know in advance
- *    how large will it be. Therefore, we can't serialize directly into the
- *    record area when we are doing an update, because if it turns out to be
- *    larger then the old record, then it would override some other record
- *    that happens to be after the old one in memory. The solution is to
- *    serialize to the staging area first, and then copy it to the place of
- *    the original if it has the same size, otherwise allocate a new linked
- *    list element, and mark the old one as abandoned.
+ *  - Record area: this contains the actual data in linked list elements. A linked list element starts
+ *    with an 8 byte pointer to the next element, and then the record follows.
+ *  - Staging area: This is a small, temporary storage area for writing updated records. This is needed,
+ *    because before serializing a record, there is no way to know in advance how large will it be.
+ *    Therefore, we can't serialize directly into the record area when we are doing an update, because
+ *    if it turns out to be larger then the old record, then it would override some other record
+ *    that happens to be after the old one in memory. The solution is to serialize to the staging area first,
+ *    and then copy it to the place of the original if it has the same size, otherwise allocate a new linked
+ *    list element at the end of the record area, and mark the old one as abandoned.
  *
- *  Compaction happens by deleting the data in the bucket area, and then reinserting all elements.
+ *  Compaction happens by deleting everything in the bucket area, and then reinserting all elements.
  *  The reinsertion happens by forgetting the structure (the linked lists) of the record area, and reading it
  *  sequentially, and inserting all non-abandoned records, starting from the beginning of the record area.
  *  Note, that insertions never override a record that have not been read by the reinsertion sweep, because
  *  both the insertions and readings happen sequentially in the record area, and the insertions obviously
  *  never overtake the reading sweep.
  *
- *  //todo: beleirni, hogy ha update-kor csokken egy record merete, akkor is uj hely kell neki, mivel
- *  kulonben eltevesztenem a reinsertion sweep-nel a kovetkezo record helyet.
+ *  Note: we have to abandon the old linked list element even when the updated record has a smaller size
+ *  than the original, because otherwise we wouldn't know where the next record starts durign a reinsertion
+ *  sweep.
+ *
+ *  The number of buckets depends on how large are the records. The serializer might be able to tell us this,
+ *  so in this case, we will calculate the number of buckets upfront, and won't do resizes.
+ *  If the serializer doesn't know the size, then we start with a small number of buckets, and do resizes as more
+ *  elements are inserted than the number of buckets.
+ *
+ *  The number of memory segments given to the staging area is usually one, because it just needs to hold
+ *  one record.
  *
  *  //todo: comment, hogy a bucket segmentek mennyisege hogy alakul (kezdeti meret kiszamitasa, es resize-ok)
  *  Meg esetleg meg komment a staging segment-ek mennyisegevel kapcsolatban.
@@ -80,9 +90,28 @@ import java.util.List;
 //todo: olyan teszt is kell, amikor nem adok neki eleg memoriat
 //todo: memoria megteles kori exceptionoket/return value-kat atgondolni
 //todo: compactot meghivni, amikor kifogytunk a memoriabol
+	// EOFException-t kell figyelni (ld. AppendableRandomAccessOutputView.addSegment)
+
+//todo: majd meg kell gondolni, hogy akarjuk-e a ReducePerformanceTest-et berakni a git-be, vagy csak rakjam el magamnak mashova
+
+//todo: minden exception elkapas utani "Bug in ReduceHashTable" exception dobast atgondolni
+
+//todo: a HashTablePerformanceComparison-ben mostmar ki lehetne emelni a ket AbstractMutableHashTable
+//teszteleset egy fv-be, es a ket tesztbol kulonbozo parameterekkel meghivni
+//(az fv-ben egy if lenne, hogy melyiket peldanyositsa)
+
+//todo: kene egy teszt nagy recordokkal (azaz amikor pl. a staging area tobb mint egy segmentet foglal)
+
+//todo: a recordSegmentIn es OutView-kat ugy kene refactoralni, hogy lenne egy RecordArea osztaly,
+//ami a mostani Appendable...-lel lenne reszben azonos,
+//viszont tagkent lenne benne a ket view privatek-kent
+	//az iras mar most is sajat fv-ken keresztul megy,
+	//az olvasasnal meg csak nehany muveletet kell delegalni: setReadPosition, getReadPosition, readLong, readRecord
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
-public class ReduceHashTable<T> {
+public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(ReduceHashTable.class);
 
 	/**
 	 * The minimum number of memory segments the hash join needs to be supplied with in order to work.
@@ -110,10 +139,10 @@ public class ReduceHashTable<T> {
 	private static final long RECORD_OFFSET_IN_LINK = 8;
 
 
-	private final TypeSerializer<T> serializer;
-	private final TypeComparator<T> comparator;
-
+	/** this is used by processRecordWithReduce */
 	private final ReduceFunction<T> reducer;
+
+	/** emit() sends data to outputCollector */
 	private final Collector<T> outputCollector;
 
 	private final boolean objectReuseEnabled;
@@ -125,6 +154,8 @@ public class ReduceHashTable<T> {
 	private final ArrayList<MemorySegment> freeMemorySegments;
 
 	private final int numAllMemorySegments;
+
+	private final int segmentSize;
 
 	/**
 	 * These will contain the buckets.
@@ -160,14 +191,16 @@ public class ReduceHashTable<T> {
 
 	private final HashTableProber<T> prober;
 
-	//todo: comment
-	private boolean enableResize = false;
+	/**
+	 * If the serializer knows the size of the records, then we can calculate the optimal number of buckets
+	 * upfront, so we don't need resizes.
+	 */
+	private boolean enableResize;
 
 
 	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, ReduceFunction<T> reducer,
 						List<MemorySegment> memory, Collector<T> outputCollector, boolean objectReuseEnabled) {
-		this.serializer = serializer;
-		this.comparator = comparator;
+		super(serializer, comparator);
 		this.reducer = reducer;
 		this.numAllMemorySegments = memory.size();
 		this.freeMemorySegments = new ArrayList<>(memory);
@@ -182,7 +215,7 @@ public class ReduceHashTable<T> {
 
 		// Get the size of the first memory segment and record it. All further buffers must have the same size.
 		// the size must also be a power of 2
-		final int segmentSize = freeMemorySegments.get(0).size();
+		segmentSize = freeMemorySegments.get(0).size();
 		if ( (segmentSize & segmentSize - 1) != 0) {
 			throw new IllegalArgumentException("Hash Table requires buffers whose size is a power of 2.");
 		}
@@ -190,8 +223,6 @@ public class ReduceHashTable<T> {
 		this.numBucketsPerSegment = segmentSize / bucketSize;
 		this.numBucketsPerSegmentBits = MathUtils.log2strict(this.numBucketsPerSegment);
 		this.numBucketsPerSegmentMask = (1 << this.numBucketsPerSegmentBits) - 1;
-
-		resetBucketSegments(calcInitialNumBucketSegments());
 
 		ArrayList<MemorySegment> recordSegments = new ArrayList<>();
 		recordSegments.add(allocateSegment());
@@ -203,44 +234,97 @@ public class ReduceHashTable<T> {
 		stagingSegmentsInView = new RandomAccessInputView(stagingSegments, segmentSize);
 		stagingSegmentsOutView = new StagingOutputView(stagingSegments, segmentSize);
 
-		reuse = serializer.createInstance();
-		prober = new HashTableProber<>(comparator, new SameTypePairComparator<>(comparator));
+		prober = new HashTableProber<>(buildSideComparator, new SameTypePairComparator<>(buildSideComparator));
+
+		enableResize = buildSideSerializer.getLength() == -1;
+	}
+
+	/**
+	 * Initialize the hash table
+	 */
+	@Override
+	public void open() {
+		synchronized (stateLock) {
+			if (!closed) {
+				throw new IllegalStateException("currently not closed.");
+			}
+			closed = false;
+		}
+
+		allocateBucketSegments(calcInitialNumBucketSegments());
+
+		stagingSegments.add(allocateSegment());
+
+		reuse = buildSideSerializer.createInstance();
+	}
+
+	@Override
+	public void close() {
+		// make sure that we close only once
+		synchronized (stateLock) {
+			if (closed) {
+				return;
+			}
+			closed = true;
+		}
+
+		LOG.debug("Closing ReduceHashTable and releasing resources.");
+
+		releaseBucketSegments();
+
+		recordSegmentsOutView.giveBackSegments(); // Note: recordSegmentsInView uses the same segments
+
+		freeMemorySegments.addAll(stagingSegments);
+		stagingSegments.clear();
+
+		numElements = 0;
+	}
+
+	@Override
+	public void abort() {
+		//todo
+		throw new NotImplementedException();
+	}
+
+	@Override
+	public List<MemorySegment> getFreeMemory() {
+		//todo
+		return null;
 	}
 
 	private int calcInitialNumBucketSegments() {
-		int recordLength = serializer.getLength();
+		int recordLength = buildSideSerializer.getLength();
 		double fraction;
 		if (recordLength == -1) {
 			// It seems that resizing is quite efficient, so we can err here on the too few bucket segments side.
 			// Even with small records, we lose only ~15% speed.
 			fraction = 0.1;
-			enableResize = true;
 		} else {
 			fraction = 8.0 / (16 + recordLength);
-			enableResize = false;
+			// note: enableResize is false in this case, so no resizing will happen
 		}
 
 		int ret = Math.max(1, MathUtils.roundDownToPowerOf2((int)(numAllMemorySegments * fraction)));
 
-		// We can't handle more than Integer.MAX_VALUE buckets (eg. because hash functions return ints)
+		// We can't handle more than Integer.MAX_VALUE buckets (eg. because hash functions return int)
 		if ((long)ret * numBucketsPerSegment > Integer.MAX_VALUE) {
 			ret = MathUtils.roundDownToPowerOf2(Integer.MAX_VALUE / numBucketsPerSegment);
 		}
 		return ret;
 	}
 
-	private void resetBucketSegments(int numBucketSegments) {
+	private void allocateBucketSegments(int numBucketSegments) {
 		if (numBucketSegments < 1) {
 			throw new RuntimeException("Bug in ReduceHashTable");
-		}
-
-		if (bucketSegments != null) {
-			freeMemorySegments.addAll(Arrays.asList(bucketSegments));
 		}
 
 		bucketSegments = new MemorySegment[numBucketSegments];
 		for(int i = 0; i < bucketSegments.length; i++) {
 			bucketSegments[i] = allocateSegment();
+			if (bucketSegments[i] == null) {
+				throw new RuntimeException("Bug in ReduceHashTable: allocateBucketSegments should be " +
+					"called in a way that there is enough free memory.");
+			}
 			// Init all pointers in all buckets to END_OF_LIST
 			for(int j = 0; j < this.numBucketsPerSegment; j++) {
 				bucketSegments[i].putLong(j << bucketSizeBits, END_OF_LIST);
@@ -248,6 +332,11 @@ public class ReduceHashTable<T> {
 		}
 		numBuckets = numBucketSegments * numBucketsPerSegment;
 		numBucketsMask = (1 << MathUtils.log2strict(numBuckets)) - 1;
+	}
+
+	private void releaseBucketSegments() {
+		freeMemorySegments.addAll(Arrays.asList(bucketSegments));
+		bucketSegments = null;
 	}
 
 	private MemorySegment allocateSegment() {
@@ -294,7 +383,7 @@ public class ReduceHashTable<T> {
 
 			// We have given this.reuse to the reducer UDF, so create new one if object reuse is disabled
 			if (!objectReuseEnabled) {
-				this.reuse = serializer.createInstance();
+				this.reuse = buildSideSerializer.createInstance();
 			}
 
 			try {
@@ -312,7 +401,7 @@ public class ReduceHashTable<T> {
 	 * If it is found, then it is overridden with the specified record.
 	 * Otherwise, the specified record is inserted.
 	 * @param record The record to insert or to replace with.
-	 * @throws IOException
+	 * @throws IOException //todo
      */
 	public void insertOrReplaceRecord(T record) throws IOException {
 		T match = prober.getMatchFor(record, reuse);
@@ -323,14 +412,20 @@ public class ReduceHashTable<T> {
 		}
 	}
 
+	@Override
+	public MutableObjectIterator<T> getEntryIterator() {
+		//todo
+		return null;
+	}
+
 	/**
 	 * Inserts the given record into the hash table.
 	 * Note: this method doesn't care about whether a record with the same key is already present.
 	 * @param record The record to insert.
-	 * @throws IOException
+	 * @throws IOException //todo
      */
 	public void insert(T record) throws IOException {
-		final int hashCode = hash(comparator.hash(record));
+		final int hashCode = hash(buildSideComparator.hash(record));
 		final int bucket = hashCode & numBucketsMask;
 		final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 		final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
@@ -344,6 +439,7 @@ public class ReduceHashTable<T> {
 		resizeTableIfNecessary();
 	}
 
+	//todo: comment
 	private void resizeTableIfNecessary() {
 		if (enableResize && numElements > numBuckets) {
 			final long newNumBucketSegments = 2L * bucketSegments.length;
@@ -353,17 +449,13 @@ public class ReduceHashTable<T> {
 			// - the buckets shouldn't occupy more than half of all our memory
 			if (newNumBucketSegments * numBucketsPerSegment < Integer.MAX_VALUE &&
 				newNumBucketSegments - bucketSegments.length < freeMemorySegments.size() &&
-				newNumBucketSegments < numAllMemorySegments / 2)
-			resizeTable((int)newNumBucketSegments);
+				newNumBucketSegments < numAllMemorySegments / 2) {
+				// do the resize
+				releaseBucketSegments();
+				allocateBucketSegments((int)newNumBucketSegments);
+				rebuild();
+			}
 		}
-	}
-
-	/**
-	 * Doubles the number of buckets.
-	 */
-	private void resizeTable(int newNumBucketSegments) {
-		resetBucketSegments(newNumBucketSegments);
-		rebuild();
 	}
 
 	/**
@@ -379,12 +471,12 @@ public class ReduceHashTable<T> {
 			recordSegmentsOutView.setWritePosition(0);
 			while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
 				final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
-				T record = serializer.deserialize(reuse, recordSegmentsInView);
+				T record = buildSideSerializer.deserialize(reuse, recordSegmentsInView);
 
 				if (!isAbandoned) {
 					// Insert into table
 
-					final int hashCode = hash(comparator.hash(record));
+					final int hashCode = hash(buildSideComparator.hash(record));
 					final int bucket = hashCode & numBucketsMask;
 					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
 					final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
@@ -398,36 +490,33 @@ public class ReduceHashTable<T> {
 			recordSegmentsOutView.freeSegmentsAfterAppendPosition();
 		} catch (IOException ex) {
 			// todo: ezek a cuccok csak olyankor dobnak IOException-t, ha elfogyott a memoria, ugye? (ami pedig itt nem lehetseges)
+			//   ja, nem biztos, hoppa, todo: rendbetenni
 			throw new RuntimeException("Bug in ReduceHashTable");
 		}
 	}
 
+	public void emitAndReset() throws IOException {
+		emit();
+		close();
+		open();
+	}
+
 	/**
-	 * Emits all aggregates currently held by the table to the collector, and resets the table.
+	 * Emits all elements currently held by the table to the collector, and resets the table.
 	 */
 	public void emit() throws IOException {
 		recordSegmentsInView.setReadPosition(0);
 		final long oldAppendPosition = recordSegmentsOutView.getAppendPosition();
 		while (recordSegmentsInView.getReadPosition() < oldAppendPosition) {
 			final boolean isAbandoned = recordSegmentsInView.readLong() == ABANDONED_RECORD;
-			T record = serializer.deserialize(reuse, recordSegmentsInView);
+			T record = buildSideSerializer.deserialize(reuse, recordSegmentsInView);
 			if (!isAbandoned) {
 				outputCollector.collect(record);
 				if (!objectReuseEnabled) { //todo: vegiggondolni, hogy ez ide kell-e
-					reuse = serializer.createInstance();
+					reuse = buildSideSerializer.createInstance();
 				}
 			}
 		}
-
-		// reset the table
-
-		recordSegmentsOutView.giveBackSegments(); // Note: recordSegmentsInView uses the same segments
-
-		resetBucketSegments(bucketSegments.length);
-
-		freeMemorySegments.addAll(stagingSegments);
-		stagingSegments.clear();
-		stagingSegments.add(allocateSegment());
 	}
 
 
@@ -530,6 +619,7 @@ public class ReduceHashTable<T> {
 			seekOutput(null, -1);
 		}
 
+		//todo: comment
 		public void freeSegmentsAfterAppendPosition() {
 			final int appendSegmentIndex = (int)(appendPosition >>> this.segmentSizeBits);
 			while (segments.size() > appendSegmentIndex + 1) {
@@ -603,7 +693,7 @@ public class ReduceHashTable<T> {
 			final long oldPositionInSegment = getCurrentPositionInSegment();
 			final long oldSegmentIndex = currentSegmentIndex;
 			writeLong(pointer);
-			serializer.serialize(record, this);
+			buildSideSerializer.serialize(record, this);
 			appendPosition += getCurrentPositionInSegment() - oldPositionInSegment +
 				getSegmentSize() * (currentSegmentIndex - oldSegmentIndex);
 			return oldLastPosition;
@@ -699,7 +789,7 @@ public class ReduceHashTable<T> {
 					recordSegmentsInView.setReadPosition(curElemPtr);
 					nextPtr = recordSegmentsInView.readLong();
 
-					currentRecordInList = serializer.deserialize(currentRecordInList, recordSegmentsInView);
+					currentRecordInList = buildSideSerializer.deserialize(currentRecordInList, recordSegmentsInView);
 					if (pairComparator.equalToReference(currentRecordInList)) {
 						// we found an element with a matching key, and not just a hash collision
 						return currentRecordInList;
@@ -709,6 +799,7 @@ public class ReduceHashTable<T> {
 					curElemPtr = nextPtr;
 				}
 			} catch (IOException ex) {
+				// todo: lehet, hogy ez megse feltetlen egy itteni bug-ot jelez, ld. deserialize javadocja
 				throw new RuntimeException("Bug in ReduceHashTable", ex);
 			}
 			return null;
@@ -729,7 +820,7 @@ public class ReduceHashTable<T> {
 
 			// determine the new size
 			stagingSegmentsOutView.reset();
-			serializer.serialize(newRecord, stagingSegmentsOutView);
+			buildSideSerializer.serialize(newRecord, stagingSegmentsOutView);
 			final int newRecordSize = (int)stagingSegmentsOutView.getWritePosition();
 			stagingSegmentsInView.setReadPosition(0);
 

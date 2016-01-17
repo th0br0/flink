@@ -233,6 +233,7 @@ public class HashTablePerformanceComparison {
 			System.out.println("Creating and filling ReduceHashTable...");
 			start = System.currentTimeMillis();
 			ReduceHashTable<IntPair> table = new ReduceHashTable<>(serializer, comparator, null, getMemory(NUM_MEM_PAGES, PAGE_SIZE), null, true);
+			table.open();
 
 			IntPair target = new IntPair();
 			while(buildInput.next(target) != null) {
@@ -270,6 +271,8 @@ public class HashTablePerformanceComparison {
 			}
 			end = System.currentTimeMillis();
 			System.out.println("Probing done. Time: " + (end-start) + " ms");
+
+			table.close();
 
 			end = System.currentTimeMillis();
 			System.out.println("Overall time: " + (end-first) + " ms");
