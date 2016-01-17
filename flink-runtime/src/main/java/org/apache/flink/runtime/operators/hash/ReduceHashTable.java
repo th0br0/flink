@@ -361,7 +361,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			// do the reduce step
 			T res = reducer.reduce(match, record);
 
-			// We have given this.reuse to the reducer UDF, so create new one if object reuse is disabled
+			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
 			if (!objectReuseEnabled) {
 				reuse = buildSideSerializer.createInstance();
 			}
@@ -437,13 +437,16 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		private final long endPosition;
 
 		public EntryIterator() {
-			recordArea.setReadPosition(0);
 			endPosition = recordArea.getAppendPosition();
+			if (endPosition == 0) {
+				return;
+			}
+			recordArea.setReadPosition(0);
 		}
 
 		@Override
 		public T next(T reuse) throws IOException {
-			if (recordArea.getReadPosition() < endPosition) {
+			if (endPosition != 0 && recordArea.getReadPosition() < endPosition) {
 				// Loop until we find a non-abandoned record.
 				// Note: the last record in the record area can't be abandoned.
 				while (true) {
@@ -671,7 +674,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		 * can arise from a call to resetAppendPosition().
 		 */
 		public void freeSegmentsAfterAppendPosition() {
-			final int appendSegmentIndex = (int)(appendPosition >>> this.segmentSizeBits);
+			final int appendSegmentIndex = (int)(appendPosition >>> segmentSizeBits);
 			while (segments.size() > appendSegmentIndex + 1) {
 				freeMemorySegments.add(segments.get(segments.size() - 1));
 				segments.remove(segments.size() - 1);

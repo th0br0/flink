@@ -156,7 +156,7 @@ public class ReduceHashTableTest {
 		@Override
 		public IntPair reduce(IntPair a, IntPair b) throws Exception {
 			if (a.getKey() != b.getKey()) {
-				throw new RuntimeException("SumReducer was called with two record that have differing keys.");
+				throw new RuntimeException("SumReducer was called with two records that have differing keys.");
 			}
 			a.setValue(a.getValue() + b.getValue());
 			return a;
@@ -192,6 +192,9 @@ public class ReduceHashTableTest {
 		// The loop is for checking the feature that multiple open / close are possible.
 		for(int j = 0; j < 3; j++) {
 			table.open();
+
+			// Test emit when table is empty
+			table.emit();
 
 			// Process some manual stuff
 			reference.processRecordWithReduce(serializer.copy(new StringPair("foo", "bar")), "foo");
@@ -258,7 +261,7 @@ public class ReduceHashTableTest {
 		@Override
 		public StringPair reduce(StringPair a, StringPair b) throws Exception {
 			if (a.getKey().compareTo(b.getKey()) != 0) {
-				throw new RuntimeException("ConcatReducer was called with two record that have differing keys.");
+				throw new RuntimeException("ConcatReducer was called with two records that have differing keys.");
 			}
 			return new StringPair(a.getKey(), a.getValue().concat(b.getValue()));
 		}
