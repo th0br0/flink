@@ -103,7 +103,7 @@ public class HashTablePerformanceComparison {
 			System.out.println("Starting update...");
 			start = System.currentTimeMillis();
 			while(updater.next(target) != null) {
-				target.setValue(target.getValue()*-1);
+				target.setValue(target.getValue() + 1);
 				table.insertOrReplaceRecord(target);
 			}
 			end = System.currentTimeMillis();
@@ -113,7 +113,7 @@ public class HashTablePerformanceComparison {
 			start = System.currentTimeMillis();
 			while (updateTester.next(target) != null) {
 				assertNotNull(prober.getMatchFor(target, temp));
-				assertEquals(target.getValue(), temp.getValue());
+				assertEquals(target.getValue() + 1, temp.getValue());
 			}
 			end = System.currentTimeMillis();
 			System.out.println("Probing done. Time: " + (end-start) + " ms");
@@ -176,7 +176,7 @@ public class HashTablePerformanceComparison {
 			System.out.println("Starting update...");
 			start = System.currentTimeMillis();
 			while(updater.next(compare) != null) {
-				compare.setValue(compare.getValue()*-1);
+				compare.setValue(compare.getValue() + 1);
 				iter = table.getMatchesFor(compare);
 				iter.next(target);
 				iter.writeBack(compare);
@@ -188,7 +188,7 @@ public class HashTablePerformanceComparison {
 			System.out.println("Starting second probing run...");
 			start = System.currentTimeMillis();
 			while(updateTester.next(compare) != null) {
-				compare.setValue(compare.getValue()*-1);
+				compare.setValue(compare.getValue() + 1);
 				iter = table.getMatchesFor(compare);
 				iter.next(target);
 				assertEquals(target.getKey(), compare.getKey());
@@ -257,7 +257,7 @@ public class HashTablePerformanceComparison {
 			System.out.println("Starting update...");
 			start = System.currentTimeMillis();
 			while(updater.next(target) != null) {
-				target.setValue(target.getValue()*-1);
+				target.setValue(target.getValue() + 1);
 				table.insertOrReplaceRecord(target);
 			}
 			end = System.currentTimeMillis();
@@ -267,7 +267,7 @@ public class HashTablePerformanceComparison {
 			start = System.currentTimeMillis();
 			while (updateTester.next(target) != null) {
 				assertNotNull(prober.getMatchFor(target, temp));
-				assertEquals(target.getValue(), temp.getValue());
+				assertEquals(target.getValue() + 1, temp.getValue());
 			}
 			end = System.currentTimeMillis();
 			System.out.println("Probing done. Time: " + (end-start) + " ms");
