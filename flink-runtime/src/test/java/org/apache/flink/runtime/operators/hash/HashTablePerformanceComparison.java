@@ -277,8 +277,7 @@ public class HashTablePerformanceComparison {
 			end = System.currentTimeMillis();
 			System.out.println("Overall time: " + (end-first) + " ms");
 
-			//todo: lehet, hogy ezt is lehetne valahogy adaptalni (esetleg a table.close() kellett ehhez?)
-			//assertEquals("Memory lost", NUM_MEM_PAGES, table.getFreeMemory().size());
+			assertEquals("Memory lost", NUM_MEM_PAGES, table.getFreeMemory().size());
 		}
 		catch (Exception e) {
 			e.printStackTrace();

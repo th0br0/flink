@@ -77,11 +77,6 @@ import java.util.List;
  *
  *  The number of memory segments given to the staging area is usually one, because it just needs to hold
  *  one record.
- *
- *  //todo: comment, hogy a bucket segmentek mennyisege hogy alakul (kezdeti meret kiszamitasa, es resize-ok)
- *  Meg esetleg meg komment a staging segment-ek mennyisegevel kapcsolatban.
- *  (altalaban keves (1 db) van, de vegiggondolni, hogy nem ehet meg tul sok helyet)
- *
  */
 
 //todo: majd kell olyan teszt, hogy ossze-vissa valtozik a recordmeret (csokken is)
@@ -101,11 +96,8 @@ import java.util.List;
 
 //todo: kene egy teszt nagy recordokkal (azaz amikor pl. a staging area tobb mint egy segmentet foglal)
 
-//todo: a recordSegmentIn es OutView-kat ugy kene refactoralni, hogy lenne egy RecordArea osztaly,
-//ami a mostani Appendable...-lel lenne reszben azonos,
-//viszont tagkent lenne benne a ket view privatek-kent
-	//az iras mar most is sajat fv-ken keresztul megy,
-	//az olvasasnal meg csak nehany muveletet kell delegalni: setReadPosition, getReadPosition, readLong, readRecord
+//todo: at kene nezni a CompactingHashTableTest-et, hatha van benne valami erdekes
+	//vagy akar valahogy lehetne egyesiteni az en tezstemmel, hogy mindket osztalyt tesztelje egyszerre
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
@@ -124,9 +116,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 	/**
 	 * The next pointer of a link will have this value, if it is not part of the linked list.
-	 * (This can happen because the record was moved due to a size change.)
+	 * (This can happen because the record couldn't be u[dated in-place due to a size change.)
 	 * Note: the record that is in the link should still be readable, in order to be possible to determine
 	 * the size of the place.
+	 * Note: the last record in the record area can't be abandoned. (EntryIterator makes use of this fact.)
 	 */
 	private static final long ABANDONED_RECORD = -2;
 
@@ -276,14 +269,12 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 	@Override
 	public void abort() {
-		//todo
-		return;
+		// ReduceHashTable doesn't have closed loops like CompactingHashTable.buildTableWithUniqueKey.
 	}
 
 	@Override
 	public List<MemorySegment> getFreeMemory() {
-		//todo
-		return null;
+		return freeMemorySegments;
 	}
 
 	private int calcInitialNumBucketSegments() {
@@ -406,12 +397,6 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		}
 	}
 
-	@Override
-	public MutableObjectIterator<T> getEntryIterator() {
-		//todo
-		return null;
-	}
-
 	/**
 	 * Inserts the given record into the hash table.
 	 * Note: this method doesn't care about whether a record with the same key is already present.
@@ -452,6 +437,43 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		}
 	}
 
+	public final class EntryIterator implements MutableObjectIterator<T> {
+
+		private final long endPosition;
+
+		public EntryIterator() {
+			recordArea.setReadPosition(0);
+			endPosition = recordArea.getAppendPosition();
+		}
+
+		@Override
+		public T next(T reuse) throws IOException {
+			if (recordArea.getReadPosition() < endPosition) {
+				// Loop until we find a non-abandoned record.
+				// Note: the last record in the record area can't be abandoned.
+				while (true) {
+					final boolean isAbandoned = recordArea.readLong() == ABANDONED_RECORD;
+					reuse = recordArea.readRecord(reuse);
+					if (!isAbandoned) {
+						return reuse;
+					}
+				}
+			} else {
+				return null;
+			}
+		}
+
+		@Override
+		public T next() throws IOException {
+			return next(buildSideSerializer.createInstance());
+		}
+	}
+
+	@Override
+	public EntryIterator getEntryIterator() {
+		return new EntryIterator();
+	}
+
 	/**
 	 * This function reinitializes the bucket segments,
 	 * reads all records from the record segments (sequentially, without using the pointers or the buckets),
@@ -459,29 +481,22 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 */
 	private void rebuild() {
 		try {
-			recordArea.setReadPosition(0);
-			final long oldAppendPosition = recordArea.getAppendPosition();
 			recordArea.resetAppendPosition();
 			recordArea.setWritePosition(0);
-			while (recordArea.getReadPosition() < oldAppendPosition) {
-				final boolean isAbandoned = recordArea.readLong() == ABANDONED_RECORD;
-				T record = recordArea.readRecord(reuse);
+			EntryIterator iter = getEntryIterator();
+			while ((reuse = iter.next(reuse)) != null) {
+				final int hashCode = hash(buildSideComparator.hash(reuse));
+				final int bucket = hashCode & numBucketsMask;
+				final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+				final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
+				final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+				final long firstPointer = bucketSegment.getLong(bucketOffset);
 
-				if (!isAbandoned) {
-					// Insert into table
-
-					final int hashCode = hash(buildSideComparator.hash(record));
-					final int bucket = hashCode & numBucketsMask;
-					final int bucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
-					final MemorySegment bucketSegment = bucketSegments[bucketSegmentIndex];
-					final int bucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
-					final long firstPointer = bucketSegment.getLong(bucketOffset);
-
-					long ptrToAppended = recordArea.noSeekAppendPointerAndRecord(firstPointer, record);
-					bucketSegment.putLong(bucketOffset, ptrToAppended);
-				}
+				long ptrToAppended = recordArea.noSeekAppendPointerAndRecord(firstPointer, reuse);
+				bucketSegment.putLong(bucketOffset, ptrToAppended);
 			}
 			recordArea.freeSegmentsAfterAppendPosition();
+
 		} catch (IOException ex) {
 			// todo: ezek a cuccok csak olyankor dobnak IOException-t, ha elfogyott a memoria, ugye? (ami pedig itt nem lehetseges)
 			//   ja, nem biztos, hoppa, todo: rendbetenni
@@ -499,16 +514,11 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * Emits all elements currently held by the table to the collector, and resets the table.
 	 */
 	public void emit() throws IOException {
-		recordArea.setReadPosition(0);
-		final long oldAppendPosition = recordArea.getAppendPosition();
-		while (recordArea.getReadPosition() < oldAppendPosition) {
-			final boolean isAbandoned = recordArea.readLong() == ABANDONED_RECORD;
-			T record = recordArea.readRecord(reuse);
-			if (!isAbandoned) {
-				outputCollector.collect(record);
-				if (!objectReuseEnabled) { //todo: vegiggondolni, hogy ez ide kell-e
-					reuse = buildSideSerializer.createInstance();
-				}
+		EntryIterator iter = getEntryIterator();
+		while ((reuse = iter.next(reuse)) != null) {
+			outputCollector.collect(reuse);
+			if (!objectReuseEnabled) {
+				reuse = buildSideSerializer.createInstance();
 			}
 		}
 	}
