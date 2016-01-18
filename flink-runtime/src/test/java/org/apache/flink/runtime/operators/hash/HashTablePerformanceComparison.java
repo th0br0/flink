@@ -44,10 +44,13 @@ public class HashTablePerformanceComparison {
 		
 	private static final int PAGE_SIZE = 16 * 1024;
 	
-	///////////////////////////private final int NUM_PAIRS = 10000000; ////20000000;
-	private final int NUM_PAIRS = 11185000;
+	private final int NUM_PAIRS = 10000000; ////20000000;
+	//private final int NUM_PAIRS = 11185000;
 	
-	private final int SIZE = 36;
+	private final int SIZE = 36; //36 volt eredetileg
+	//NUM_PAIRS = 11185000:
+	// 27-nel meg epp lefut mindketto //23 kell az enyemnek
+	//
 		
 	private final TypeSerializer<IntPair> serializer = new IntPairSerializer();
 	

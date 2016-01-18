@@ -87,6 +87,10 @@ import java.util.List;
 
 //todo: at kene nezni a CompactingHashTableTest-et, hatha van benne valami erdekes
 	//vagy akar valahogy lehetne egyesiteni az en tesztemmel, hogy mindket osztalyt tesztelje egyszerre
+	//ki kene emelni a tesztek magjat egy kulon fv-be, es meghivni a hash tablaval parameterezve
+	//!meg van meg a MemoryHashTableTest is!
+
+//todo: debug loggolas
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
@@ -270,6 +274,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 	@Override
 	public List<MemorySegment> getFreeMemory() {
+		if (!this.closed) {
+			throw new IllegalStateException("Cannot return memory while ReduceHashTable is open.");
+		}
+
 		return freeMemorySegments;
 	}
 
@@ -542,10 +550,22 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		if (holes > 0) {
 			rebuild();
 		} else {
-			throw new EOFException();
+			throw new EOFException("ReduceHashTable memory ran out. " + getMemoryConsumptionString());
 		}
 	}
 
+	/**
+	 * @return String containing a summary of the memory consumption for error messages
+	 */
+	private String getMemoryConsumptionString() {
+		return "ReduceHashTable memory stats:\n" +
+			"Total memory:     " + numAllMemorySegments * segmentSize + "\n" +
+			"Bucket area:      " + numBuckets * 8  + "\n" +
+			"Record area:      " + recordArea.getTotalSize() + "\n" +
+			"Staging area:     " + stagingSegments.size() * segmentSize + "\n" +
+			"Num of elements:  " + numElements + "\n" +
+			"Holes total size: " + holes;
+	}
 
 	/**
 	 * This class encapsulates the memory segments that belong to the record area. It
@@ -628,6 +648,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			segments.clear();
 
 			resetAppendPosition();
+		}
+
+		public long getTotalSize() {
+			return segments.size() * segmentSize;
 		}
 
 		// ----------------------- Output -----------------------
@@ -822,6 +846,14 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		return new HashTableProber<>(probeTypeComparator, pairComparator);
 	}
 
+	/**
+	 * A prober for accessing the table.
+	 * In addition to getMatchFor and updateMatch, it also has insertAfterNoMatch.
+	 * Note: It is safe to interleave the function calls of different probers, since the state
+	 * that is maintained between getMatchFor and the other methods is entirely contained in the
+	 * prober, and not in the table.
+	 * @param <PT> The type of the records that we are probing with
+     */
 	public final class HashTableProber<PT> extends AbstractHashTableProber<PT, T>{
 
 		public HashTableProber(TypeComparator<PT> probeTypeComparator, TypePairComparator<PT, T> pairComparator) {
@@ -833,6 +865,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		private long curElemPtr;
 		private long prevElemPtr;
 		private long nextPtr;
+		private long recordEnd;
 
 		/**
 		 * Searches the hash table for the record with the given key.
@@ -862,6 +895,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 					nextPtr = recordArea.readLong();
 
 					currentRecordInList = recordArea.readRecord(currentRecordInList);
+					recordEnd = recordArea.getReadPosition();
 					if (pairComparator.equalToReference(currentRecordInList)) {
 						// we found an element with a matching key, and not just a hash collision
 						return currentRecordInList;
@@ -899,7 +933,7 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				stagingSegmentsInView.setReadPosition(0);
 
 				// Determine the size of the place of the old record.
-				final int oldRecordSize = (int)(recordArea.getReadPosition() - (curElemPtr + RECORD_OFFSET_IN_LINK));
+				final int oldRecordSize = (int)(recordEnd - (curElemPtr + RECORD_OFFSET_IN_LINK));
 
 				if (newRecordSize == oldRecordSize) {
 					// overwrite record at its original place
