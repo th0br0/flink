@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.examples.java.wordcount;
+package org.apache.flink.test.manual;
 
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.DataSet;
@@ -29,13 +29,13 @@ import java.io.Serializable;
 import java.util.Iterator;
 import java.util.Random;
 
-public class ReducePerformanceTest {
+public class ReducePerformance {
 	
 	public static void main(String[] args) throws Exception {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		//env.getConfig().enableObjectReuse();
-		//env.setParallelism(4); ////
+		//env.setParallelism(1);
 
 		UnsortedGrouping<Tuple2<Integer, Integer>> input =
 			env.fromCollection(new RandomIterator(), TupleTypeInfo.<Tuple2<Integer, Integer>>getBasicTupleTypeInfo(Integer.class, Integer.class))
