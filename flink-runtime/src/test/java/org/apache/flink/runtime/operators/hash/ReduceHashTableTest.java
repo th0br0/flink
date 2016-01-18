@@ -96,10 +96,6 @@ public class ReduceHashTableTest {
 		};
 	}
 
-	// ------------------------------------------------------------------------
-	//  tests
-	// ------------------------------------------------------------------------
-
 	@Test
 	public void testHashTableGrowthWithInsert() {
 		try {
@@ -161,7 +157,7 @@ public class ReduceHashTableTest {
 		try {
 			final int numElements = 1000000;
 
-			List<MemorySegment> memory = getMemory(10000, 32 * 1024);
+			List<MemorySegment> memory = getMemory(1000, 32 * 1024);
 
 			// we create a hash table that thinks the records are super large. that makes it choose initially
 			// a lot of memory for the partition buffers, and start with a smaller hash table. that way
@@ -213,14 +209,16 @@ public class ReduceHashTableTest {
 	/**
 	 * This test validates that new inserts (rather than updates) in "insertOrReplace()" properly
 	 * react to out of memory conditions.
+	 *
+	 * Btw. this also tests the situation, when records are larger than one memory segment.
 	 */
 	@Test
 	public void testInsertsWithInsertOrReplace() {
 		try {
 			final int numElements = 1000;
 
-			final String longString = getLongString(10000);
-			List<MemorySegment> memory = getMemory(1000, 32 * 1024);
+			final String longString = getLongString(100000);
+			List<MemorySegment> memory = getMemory(7000, 32 * 1024);
 
 			// we create a hash table that thinks the records are super large. that makes it choose initially
 			// a lot of memory for the partition buffers, and start with a smaller hash table. that way
@@ -309,7 +307,7 @@ public class ReduceHashTableTest {
 		// (because of cache misses (also in the segment arrays))
 		final int keyRange = 1000000;
 		final int valueRange = 10;
-		final int numRecords = 1000000; //10000000; //todo: a vegso valtozatban kisebbre venni
+		final int numRecords = 1000000;
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -335,7 +333,7 @@ public class ReduceHashTableTest {
 			input.add(new IntPair(rnd.nextInt(keyRange), rnd.nextInt(valueRange)));
 		}
 
-		System.out.println("start"); //todo remove
+		//System.out.println("start");
 		long start = System.currentTimeMillis();
 
 		// Process the generated input
@@ -354,7 +352,7 @@ public class ReduceHashTableTest {
 		table.close();
 
 		long end = System.currentTimeMillis();
-		System.out.println("stop, time: " + (end - start)); //todo remove
+		//System.out.println("stop, time: " + (end - start));
 
 		// Check results
 
