@@ -76,9 +76,6 @@ import java.util.List;
  *  one record.
  */
 
-
-//todo: majd meg kell gondolni, hogy akarjuk-e a ReducePerformanceTest-et berakni a git-be, vagy csak rakjam el magamnak mashova
-
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
