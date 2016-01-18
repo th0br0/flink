@@ -139,17 +139,18 @@ public class ReduceHashTableTest {
 
 		assertEquals(expectedOutput.size(), actualOutput.size());
 
-		ArrayList<Integer> expectedValues = new ArrayList<>();
-		for (IntPair record: expectedOutput) {
-			expectedValues.add(record.getValue());
+		Integer[] expectedValues = new Integer[expectedOutput.size()];
+		for (int i = 0; i < expectedOutput.size(); i++) {
+			expectedValues[i] = expectedOutput.get(i).getValue();
 		}
-		ArrayList<Integer> actualValues = new ArrayList<>();
-		for (IntPair record: actualOutput) {
-			actualValues.add(record.getValue());
+		Integer[] actualValues = new Integer[actualOutput.size()];
+		for (int i = 0; i < actualOutput.size(); i++) {
+			actualValues[i] = actualOutput.get(i).getValue();
 		}
-		expectedValues.sort(Ordering.<Integer>natural());
-		actualValues.sort(Ordering.<Integer>natural());
-		assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
+
+		Arrays.sort(expectedValues, Ordering.<Integer>natural());
+		Arrays.sort(actualValues, Ordering.<Integer>natural());
+		assertArrayEquals(expectedValues, actualValues);
 	}
 
 	class SumReducer implements ReduceFunction<IntPair> {
@@ -238,17 +239,18 @@ public class ReduceHashTableTest {
 
 			assertEquals(expectedOutput.size(), actualOutput.size());
 
-			ArrayList<String> expectedValues = new ArrayList<>();
-			for (StringPair record : expectedOutput) {
-				expectedValues.add(record.getValue());
+			String[] expectedValues = new String[expectedOutput.size()];
+			for (int i = 0; i < expectedOutput.size(); i++) {
+				expectedValues[i] = expectedOutput.get(i).getValue();
 			}
-			ArrayList<String> actualValues = new ArrayList<>();
-			for (StringPair record : actualOutput) {
-				actualValues.add(record.getValue());
+			String[] actualValues = new String[actualOutput.size()];
+			for (int i = 0; i < actualOutput.size(); i++) {
+				actualValues[i] = actualOutput.get(i).getValue();
 			}
-			expectedValues.sort(Ordering.<String>natural());
-			actualValues.sort(Ordering.<String>natural());
-			assertArrayEquals(expectedValues.toArray(), actualValues.toArray());
+
+			Arrays.sort(expectedValues, Ordering.<String>natural());
+			Arrays.sort(actualValues, Ordering.<String>natural());
+			assertArrayEquals(expectedValues, actualValues);
 
 			expectedOutput.clear();
 			actualOutput.clear();

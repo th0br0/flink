@@ -70,6 +70,11 @@ public class ReducePerformanceTest {
 
 			return reuse;
 		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
 	}
 
 	private static final class SumReducer implements ReduceFunction<Tuple2<Integer, Integer>> {
