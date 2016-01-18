@@ -139,7 +139,7 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				}
 				break;
 			case HASHED_PARTIAL_REDUCE:
-				this.table = new ReduceHashTable<T>(this.serializer, this.comparator, this.reducer, memory, this.output, objectReuseEnabled);
+				this.table = new ReduceHashTable<T>(this.serializer, this.comparator, memory, this.reducer, this.output, objectReuseEnabled);
 				break;
 			default:
 				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");

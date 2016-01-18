@@ -84,13 +84,7 @@ import java.util.List;
 //(az fv-ben egy if lenne, hogy melyiket peldanyositsa)
 
 //todo: kene egy teszt nagy recordokkal (azaz amikor pl. a staging area tobb mint egy segmentet foglal)
-
-//todo: at kene nezni a CompactingHashTableTest-et, hatha van benne valami erdekes
-	//vagy akar valahogy lehetne egyesiteni az en tesztemmel, hogy mindket osztalyt tesztelje egyszerre
-	//ki kene emelni a tesztek magjat egy kulon fv-be, es meghivni a hash tablaval parameterezve
-	//!meg van meg a MemoryHashTableTest is!
-
-//todo: debug loggolas
+		//lehet, hogy a MemoryHashTableTest-ben van ilyen?
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
@@ -183,8 +177,16 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	private boolean enableResize;
 
 
-	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, ReduceFunction<T> reducer,
-						List<MemorySegment> memory, Collector<T> outputCollector, boolean objectReuseEnabled) {
+	/**
+	 * This constructor is for the case when will only call those operations that are also
+	 * present on CompactingHashTable.
+	 */
+	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, List<MemorySegment> memory) {
+		this(serializer, comparator, memory, null, null, false);
+	}
+
+	public ReduceHashTable(TypeSerializer<T> serializer, TypeComparator<T> comparator, List<MemorySegment> memory,
+						ReduceFunction<T> reducer, Collector<T> outputCollector, boolean objectReuseEnabled) {
 		super(serializer, comparator);
 		this.reducer = reducer;
 		this.numAllMemorySegments = memory.size();
@@ -212,7 +214,6 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		recordArea = new RecordArea(segmentSize);
 
 		stagingSegments = new ArrayList<>();
-		stagingSegments.add(allocateSegment());
 		stagingSegmentsInView = new RandomAccessInputView(stagingSegments, segmentSize);
 		stagingSegmentsOutView = new StagingOutputView(stagingSegments, segmentSize);
 

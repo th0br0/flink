@@ -111,7 +111,7 @@ public class ReduceHashTableTest {
 			// a lot of memory for the partition buffers, and start with a smaller hash table. that way
 			// we trigger a hash table growth early.
 			ReduceHashTable<Tuple2<Long, String>> table = new ReduceHashTable<Tuple2<Long, String>>(
-				serializer, comparator, null, memory, null, false);
+				serializer, comparator, memory, null, null, false);
 			table.open();
 
 			for (long i = 0; i < numElements; i++) {
@@ -167,7 +167,7 @@ public class ReduceHashTableTest {
 			// a lot of memory for the partition buffers, and start with a smaller hash table. that way
 			// we trigger a hash table growth early.
 			ReduceHashTable<Tuple2<Long, String>> table = new ReduceHashTable<Tuple2<Long, String>>(
-				serializer, comparator, null, memory, null, false);
+				serializer, comparator, memory, null, null, false);
 			table.open();
 
 			for (long i = 0; i < numElements; i++) {
@@ -226,7 +226,7 @@ public class ReduceHashTableTest {
 			// a lot of memory for the partition buffers, and start with a smaller hash table. that way
 			// we trigger a hash table growth early.
 			ReduceHashTable<Tuple2<Long, String>> table = new ReduceHashTable<Tuple2<Long, String>>(
-				serializer, comparator, null, memory, null, false);
+				serializer, comparator, memory, null, null, false);
 			table.open();
 
 			// first, we insert some elements
@@ -325,7 +325,7 @@ public class ReduceHashTableTest {
 		List<IntPair> actualOutput = new ArrayList<>();
 
 		ReduceHashTable<IntPair> table = new ReduceHashTable<>(
-			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE),
+			serializer, comparator, getMemory(numMemPages, PAGE_SIZE), reducer,
 			new CopyingListCollector<>(actualOutput, serializer), true);
 		table.open();
 
@@ -409,7 +409,7 @@ public class ReduceHashTableTest {
 		List<StringPair> actualOutput = new ArrayList<>();
 
 		ReduceHashTable<StringPair> table = new ReduceHashTable<>(
-			serializer, comparator, reducer, getMemory(numMemPages, PAGE_SIZE), new CopyingListCollector<>(actualOutput, serializer), true);
+			serializer, comparator, getMemory(numMemPages, PAGE_SIZE), reducer, new CopyingListCollector<>(actualOutput, serializer), true);
 
 		// The loop is for checking the feature that multiple open / close are possible.
 		for(int j = 0; j < 3; j++) {

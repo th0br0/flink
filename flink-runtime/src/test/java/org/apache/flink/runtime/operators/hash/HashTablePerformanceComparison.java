@@ -235,7 +235,7 @@ public class HashTablePerformanceComparison {
 
 			System.out.println("Creating and filling ReduceHashTable...");
 			start = System.currentTimeMillis();
-			ReduceHashTable<IntPair> table = new ReduceHashTable<>(serializer, comparator, null, getMemory(NUM_MEM_PAGES, PAGE_SIZE), null, true);
+			ReduceHashTable<IntPair> table = new ReduceHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE), null, null, true);
 			table.open();
 
 			IntPair target = new IntPair();
