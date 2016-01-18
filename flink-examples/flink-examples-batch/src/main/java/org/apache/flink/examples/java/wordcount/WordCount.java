@@ -19,7 +19,6 @@
 package org.apache.flink.examples.java.wordcount;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -61,7 +60,6 @@ public class WordCount {
 		
 		// set up the execution environment
 		final ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(1);
 
 		// get input data
 		DataSet<String> text = getTextDataSet(env);
@@ -71,8 +69,7 @@ public class WordCount {
 				text.flatMap(new Tokenizer())
 				// group by the tuple field "0" and sum up tuple field "1"
 				.groupBy(0)
-				//.sum(1);
-				.reduce(new MySum());
+				.sum(1);
 
 		// emit result
 		if (fileOutput) {
@@ -146,14 +143,6 @@ public class WordCount {
 		} else {
 			// get default test text data
 			return WordCountData.getDefaultTextLineDataSet(env);
-		}
-	}
-
-	static class MySum implements ReduceFunction<Tuple2<String, Integer>> {
-		@Override
-		public Tuple2<String, Integer> reduce(Tuple2<String, Integer> a, Tuple2<String, Integer> b) throws Exception {
-			a.f1 = a.f1 + b.f1;
-			return a;
 		}
 	}
 }
