@@ -43,7 +43,7 @@ import java.util.List;
  * todo: comment
  */
 
-//todo: enforce-olni kell egy max load factort
+//todo: a HashTablePerformaceComparison-ban lehet, hogy megint gaz, hogy ugyanoylan a sorrend?
 
 @SuppressWarnings("ForLoopReplaceableByForEach")
 public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T> {
@@ -137,11 +137,12 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 
 		inView = new RandomAccessInputView(segments, segmentSize);
 
-		MemorySegment[] segmentArray = new MemorySegment[segments.size()];
-		for (int i = 0; i < segments.size(); i++) {
-			segmentArray[i] = segments.get(i);
-		}
-		outView = new RandomAccessOutputView(segmentArray, segmentSize);
+//		MemorySegment[] segmentArray = new MemorySegment[segments.size()];
+//		for (int i = 0; i < segments.size(); i++) {
+//			segmentArray[i] = segments.get(i);
+//		}
+//		outView = new RandomAccessOutputView(segmentArray, segmentSize);
+		outView = new RandomAccessOutputView(segments, segmentSize);
 
 		prober = new HashTableProber<>(buildSideComparator, new SameTypePairComparator<>(buildSideComparator));
 	}
@@ -422,7 +423,7 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 		 * @throws IOException (EOFException specifically, if memory ran out)
 		 */
 		public void insertAfterNoMatch(T record) throws IOException {
-			outView.setWritePosition(matchPtr); //todo Itt van egy olyan performance problema, hogy itt meg most beleindexelunk az outView-nak a tombjebe, ami lehet egy cache miss, es ugyanazt a segementet erjuk el (lehet, hogy azt kene csinalni, hogy az OutView-t atirni ArrayList-re, es akkor hasznalhatnak ugyanazt az instance-t, vagyis be lenne cache-elodve az elem)
+			outView.setWritePosition(matchPtr);
 			outView.writeBoolean(true);
 			buildSideSerializer.serialize(record, outView);
 

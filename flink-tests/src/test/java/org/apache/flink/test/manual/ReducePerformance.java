@@ -35,11 +35,11 @@ public class ReducePerformance {
 	public static void main(String[] args) throws Exception {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		//env.getConfig().enableObjectReuse();
+		env.getConfig().enableObjectReuse();
 		env.setParallelism(1);
 
 		DataSet<Tuple2<Integer, Integer>> output =
-			env.fromParallelCollection(new SplittableRandomIterator(40 * 1000 * 1000, new TupleIntIntIterator(4 * 1000 * 1000)),
+			env.fromParallelCollection(new SplittableRandomIterator(20 * 1000 * 1000, new TupleIntIntIterator(4 * 1000 * 1000)),
 				TupleTypeInfo.<Tuple2<Integer, Integer>>getBasicTupleTypeInfo(Integer.class, Integer.class))
 				.groupBy("0")
 				.reduce(new SumReducer());

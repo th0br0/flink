@@ -46,7 +46,7 @@ public class HashTablePerformanceComparison {
 	
 	private final int NUM_PAIRS = 20000000;
 	
-	private final int SIZE = 36;
+	private final int SIZE = 36; //36
 		
 	private final TypeSerializer<IntPair> serializer = new IntPairSerializer();
 	
@@ -290,8 +290,6 @@ public class HashTablePerformanceComparison {
 	@Test
 	public void testOpenAddressingHashTablePerformance() {
 
-		// Read the comment in ReduceHashTable.hash before using this!
-
 		try {
 			final int NUM_MEM_PAGES = SIZE * NUM_PAIRS / PAGE_SIZE;
 
@@ -308,7 +306,7 @@ public class HashTablePerformanceComparison {
 
 			long first = System.currentTimeMillis();
 
-			System.out.println("Creating and filling ReduceHashTable...");
+			System.out.println("Creating and filling OpenAddressingHashTable...");
 			start = System.currentTimeMillis();
 			OpenAddressingHashTable<IntPair> table = new OpenAddressingHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE), null, null, true);
 			table.open();

@@ -307,7 +307,7 @@ public class ReduceHashTableTest {
 		// (because of cache misses (also in the segment arrays))
 		final int keyRange = 1000000; //////////////////////////////1000000
 		final int valueRange = 10;
-		final int numRecords = 10000000; //////////////////////////////1000000
+		final int numRecords = 40000000; //////////////////////////////1000000
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -322,37 +322,44 @@ public class ReduceHashTableTest {
 		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use is proportional to the number of different keys
 		List<IntPair> actualOutput = new ArrayList<>();
 
+		//ReduceHashTable<IntPair> table = new ReduceHashTable<>( ////////////////////////////////////////////
 		OpenAddressingHashTable<IntPair> table = new OpenAddressingHashTable<>( ////////////////////////////////////////////
 			serializer, comparator, getMemory(numMemPages, PAGE_SIZE), reducer,
 			new CopyingListCollector<>(actualOutput, serializer), true);
 		table.open();
 
 		// Generate some input
-		final List<IntPair> input = new ArrayList<>();
+		final int[] inputKeys = new int[numRecords];
+		final int[] inputVals = new int[numRecords];
 		for(int i = 0; i < numRecords; i++) {
-			input.add(new IntPair(rnd.nextInt(keyRange), rnd.nextInt(valueRange)));
+			inputKeys[i] = rnd.nextInt(keyRange);
+			inputVals[i] = rnd.nextInt(valueRange);
 		}
 
-		//System.out.println("start");
+		System.out.println("start");
 		long start = System.currentTimeMillis();
 
 		// Process the generated input
 		final int numIntermingledEmits = 5;
-		for (IntPair record: input) {
+		final IntPair record = new IntPair();
+		for (int i = 0; i < numRecords; i++) {
+			record.setKey(inputKeys[i]);
+			record.setValue(inputVals[i]);
+
 			table.processRecordWithReduce(serializer.copy(record));
-			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
-			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
-				// this will fire approx. numIntermingledEmits times
-				reference.emitAndReset();
-				table.emitAndReset();
-			}
+//			reference.processRecordWithReduce(serializer.copy(record), record.getKey());
+//			if(rnd.nextDouble() < 1.0 / ((double)numRecords / numIntermingledEmits)) {
+//				// this will fire approx. numIntermingledEmits times
+//				reference.emitAndReset();
+//				table.emitAndReset();
+//			}
 		}
 		reference.emitAndReset();
 		table.emit();
 		table.close();
 
 		long end = System.currentTimeMillis();
-		//System.out.println("stop, time: " + (end - start));
+		System.out.println("stop, time: " + (end - start));
 
 		// Check results
 

@@ -56,7 +56,15 @@ public abstract class TupleSerializerBase<T> extends TypeSerializer<T> {
 
 	@Override
 	public int getLength() {
-		return -1;
+		int sum = 0;
+		for (TypeSerializer<Object> ser: fieldSerializers) {
+			int fieldLength = ser.getLength();
+			if (fieldLength == -1) {
+				return -1;
+			}
+			sum += fieldLength;
+		}
+		return sum;
 	}
 
 	public int getArity() {

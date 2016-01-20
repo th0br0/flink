@@ -20,6 +20,7 @@
 package org.apache.flink.runtime.io.disk;
 
 import java.io.EOFException;
+import java.util.ArrayList;
 
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.SeekableDataOutputView;
@@ -33,27 +34,46 @@ import org.apache.flink.runtime.util.MathUtils;
  */
 public class RandomAccessOutputView extends AbstractPagedOutputView implements SeekableDataOutputView
 {
-	private final MemorySegment[] segments;
+	private final ArrayList<MemorySegment> segments;
 	
 	private int currentSegmentIndex;
 	
 	private final int segmentSizeBits;
 	
 	private final int segmentSizeMask;
-	
+
+	public RandomAccessOutputView(ArrayList<MemorySegment> segments, int segmentSize) {
+		this(segments, segmentSize, MathUtils.log2strict(segmentSize));
+	}
+
+	public RandomAccessOutputView(ArrayList<MemorySegment> segments, int segmentSize, int segmentSizeBits) {
+		super(segments.get(0), segmentSize, 0);
+
+		if ((segmentSize & (segmentSize - 1)) != 0) {
+			throw new IllegalArgumentException("Segment size must be a power of 2!");
+		}
+
+		this.segments = segments;
+		this.segmentSizeBits = segmentSizeBits;
+		this.segmentSizeMask = segmentSize - 1;
+	}
+
 
 	public RandomAccessOutputView(MemorySegment[] segments, int segmentSize) {
 		this(segments, segmentSize, MathUtils.log2strict(segmentSize));
 	}
-	
+
 	public RandomAccessOutputView(MemorySegment[] segments, int segmentSize, int segmentSizeBits) {
 		super(segments[0], segmentSize, 0);
 		
 		if ((segmentSize & (segmentSize - 1)) != 0) {
 			throw new IllegalArgumentException("Segment size must be a power of 2!");
 		}
-		
-		this.segments = segments;
+
+		this.segments = new ArrayList<>(segments.length);
+		for (int i = 0; i < segments.length; i++) {
+			this.segments.set(i, segments[i]);
+		}
 		this.segmentSizeBits = segmentSizeBits;
 		this.segmentSizeMask = segmentSize - 1;
 	}
@@ -61,8 +81,8 @@ public class RandomAccessOutputView extends AbstractPagedOutputView implements S
 
 	@Override
 	protected MemorySegment nextSegment(MemorySegment current, int positionInCurrent) throws EOFException {
-		if (++this.currentSegmentIndex < this.segments.length) {
-			return this.segments[this.currentSegmentIndex];
+		if (++this.currentSegmentIndex < this.segments.size()) {
+			return this.segments.get(this.currentSegmentIndex);
 		} else {
 			throw new EOFException();
 		}
@@ -74,6 +94,6 @@ public class RandomAccessOutputView extends AbstractPagedOutputView implements S
 		final int offset = (int) (position & this.segmentSizeMask);
 		
 		this.currentSegmentIndex = bufferNum;
-		seekOutput(this.segments[bufferNum], offset);
+		seekOutput(this.segments.get(bufferNum), offset);
 	}
 }
