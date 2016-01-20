@@ -103,6 +103,7 @@ public class MemoryHashTableTest {
 		final int NUM_MEM_PAGES = 32 * NUM_PAIRS / PAGE_SIZE;
 		testDifferentProbersCore(new CompactingHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
 		testDifferentProbersCore(new ReduceHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
+		testDifferentProbersCore(new OpenAddressingHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
 	}
 
 	private void testDifferentProbersCore(AbstractMutableHashTable<IntPair> table, int numMemPages) {
@@ -121,6 +122,7 @@ public class MemoryHashTableTest {
 			final int NUM_MEM_PAGES = 32 * NUM_PAIRS / PAGE_SIZE;
 			testBuildAndRetrieveCore(new CompactingHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
 			testBuildAndRetrieveCore(new ReduceHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
+			testBuildAndRetrieveCore(new OpenAddressingHashTable<>(serializer, comparator, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
 		} catch (Exception e) {
 			e.printStackTrace();
 			fail("Error: " + e.getMessage());
@@ -373,8 +375,8 @@ public class MemoryHashTableTest {
 	public void testRepeatedBuildAndRetrieve() {
 		try {
 			final int NUM_MEM_PAGES = SIZE * NUM_LISTS / PAGE_SIZE;
-			testRepeatedBuildAndRetrieveCore(new CompactingHashTable<IntList>(serializerV, comparatorV, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
-			testRepeatedBuildAndRetrieveCore(new ReduceHashTable<IntList>(serializerV, comparatorV, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
+			testRepeatedBuildAndRetrieveCore(new CompactingHashTable<>(serializerV, comparatorV, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
+			testRepeatedBuildAndRetrieveCore(new ReduceHashTable<>(serializerV, comparatorV, getMemory(NUM_MEM_PAGES, PAGE_SIZE)), NUM_MEM_PAGES);
 		} catch (Exception e) {
 			e.printStackTrace();
 			fail("Error: " + e.getMessage());
