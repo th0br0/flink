@@ -23,12 +23,9 @@ import org.apache.flink.api.common.typeutils.SameTypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeComparator;
 import org.apache.flink.api.common.typeutils.TypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.disk.RandomAccessInputView;
 import org.apache.flink.runtime.io.disk.RandomAccessOutputView;
-import org.apache.flink.runtime.memory.AbstractPagedOutputView;
-import org.apache.flink.runtime.util.MathUtils;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.MutableObjectIterator;
 import org.slf4j.Logger;
@@ -208,6 +205,17 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 		return code >= 0 ? code : -(code + 1);
 	}
 
+
+	private T prev;
+	public long dummy;
+
+	private void prefetch(T record) throws IOException {
+		final int hashCode = hash(buildSideComparator.hash(record));
+		final int bucketInd = hashCode % numBuckets;
+		inView.setReadPosition((long)bucketInd * bucketSize);
+		dummy = inView.readByte();
+	}
+
 	/**
 	 * Searches the hash table for the record with matching key, and updates it (making one reduce step) if found,
 	 * otherwise inserts a new entry.
@@ -217,20 +225,49 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 	 * @param record The record to be processed.
 	 */
 	public void processRecordWithReduce(T record) throws Exception {
-		T match = prober.getMatchFor(record, reuse);
-		if (match == null) {
-			prober.insertAfterNoMatch(record);
-		} else {
-			// do the reduce step
-			T res = reducer.reduce(match, record);
+//		T match = prober.getMatchFor(record, reuse);
+//		if (match == null) {
+//			prober.insertAfterNoMatch(record);
+//		} else {
+//			// do the reduce step
+//			T res = reducer.reduce(match, record);
+//
+//			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+//			if (!objectReuseEnabled) {
+//				reuse = buildSideSerializer.createInstance();
+//			}
+//
+//			prober.updateMatch(res);
+//		}
 
-			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
-			if (!objectReuseEnabled) {
-				reuse = buildSideSerializer.createInstance();
+
+
+
+		prefetch(record);
+
+		if (prev != null) {
+			// process prev
+			T match = prober.getMatchFor(prev, reuse);
+			if (match == null) {
+				prober.insertAfterNoMatch(prev);
+			} else {
+				// do the reduce step
+				T res = reducer.reduce(match, prev);
+
+				// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+				if (!objectReuseEnabled) {
+					reuse = buildSideSerializer.createInstance();
+				}
+
+				prober.updateMatch(res);
 			}
 
-			prober.updateMatch(res);
+			// switch
+			prev = buildSideSerializer.copy(record, prev);
+		} else {
+			prev = buildSideSerializer.createInstance();
 		}
+		//todo: az utolso nem emittalodik igy most
 	}
 
 	/**

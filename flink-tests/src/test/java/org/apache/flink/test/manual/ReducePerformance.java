@@ -21,7 +21,6 @@ package org.apache.flink.test.manual;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.operators.UnsortedGrouping;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.util.SplittableIterator;
@@ -39,10 +38,11 @@ public class ReducePerformance {
 		env.setParallelism(1);
 
 		DataSet<Tuple2<Integer, Integer>> output =
-			env.fromParallelCollection(new SplittableRandomIterator(20 * 1000 * 1000, new TupleIntIntIterator(4 * 1000 * 1000)),
+			env.fromParallelCollection(new SplittableRandomIterator(40 * 1000 * 1000, new TupleIntIntIterator(4 * 1000 * 1000)),
 				TupleTypeInfo.<Tuple2<Integer, Integer>>getBasicTupleTypeInfo(Integer.class, Integer.class))
 				.groupBy("0")
 				.reduce(new SumReducer());
+
 
 //		DataSet<Tuple2<Integer, Integer>> output =
 //			env.fromParallelCollection(new SplittableRandomIterator(40 * 1000 * 1000, new TupleStringIntIterator(4 * 1000 * 1000)),
