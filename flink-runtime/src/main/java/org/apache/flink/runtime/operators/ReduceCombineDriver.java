@@ -72,8 +72,8 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 	
 	private QuickSort sortAlgo = new QuickSort();
 
-	//private ReduceHashTable<T> table;
-	private OpenAddressingHashTable<T> table;
+	private ReduceHashTable<T> table;
+	//private OpenAddressingHashTable<T> table;
 
 	private List<MemorySegment> memory;
 
@@ -141,8 +141,8 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 				}
 				break;
 			case HASHED_PARTIAL_REDUCE:
-				//this.table = new ReduceHashTable<T>(this.serializer, this.comparator, memory, this.reducer, this.output, objectReuseEnabled);
-				this.table = new OpenAddressingHashTable<T>(this.serializer, this.comparator, memory, this.reducer, this.output, objectReuseEnabled);
+				this.table = new ReduceHashTable<T>(this.serializer, this.comparator, memory, this.reducer, this.output, objectReuseEnabled);
+				//this.table = new OpenAddressingHashTable<T>(this.serializer, this.comparator, memory, this.reducer, this.output, objectReuseEnabled);
 				break;
 			default:
 				throw new Exception("Invalid strategy " + this.taskContext.getTaskConfig().getDriverStrategy() + " for reduce combiner.");

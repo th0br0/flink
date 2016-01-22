@@ -259,6 +259,8 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 
 		numElements = 0;
 		holes = 0;
+
+		prev = null;
 	}
 
 	@Override
@@ -353,6 +355,52 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		return Math.abs(code);
 	}
 
+
+
+
+	private T prev;
+	public long dummy;
+
+	private int prevBucketSegmentIndex;
+	private int prevBucketOffset;
+	private MemorySegment prevBucketSegment;
+
+	private void prefetchXXX(T record) throws IOException {
+		if(recordArea.getAppendPosition() != 0) {
+			final int hashCode = hash(buildSideComparator.hash(record));
+			final int bucket = hashCode & numBucketsMask;
+			prevBucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+			prevBucketSegment = bucketSegments[prevBucketSegmentIndex];
+			prevBucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+
+			dummy = prevBucketSegment.getLong(prevBucketOffset);
+
+//			recordArea.setReadPosition(dummy + 1);
+//			dummy = recordArea.readByte();
+		} else {
+			final int hashCode = hash(buildSideComparator.hash(record));
+			final int bucket = hashCode & numBucketsMask;
+			prevBucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+			prevBucketSegment = bucketSegments[prevBucketSegmentIndex];
+			prevBucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+		}
+	}
+
+	private void prefetch(T record) throws IOException {
+		if(recordArea.getAppendPosition() != 0) {
+			final int hashCode = hash(buildSideComparator.hash(record));
+			final int bucket = hashCode & numBucketsMask;
+			prevBucketSegmentIndex = bucket >>> numBucketsPerSegmentBits; // which segment contains the bucket
+			prevBucketSegment = bucketSegments[prevBucketSegmentIndex];
+			prevBucketOffset = (bucket & numBucketsPerSegmentMask) << bucketSizeBits; // offset of the bucket in the segment
+
+			dummy = prevBucketSegment.getLong(prevBucketOffset);
+
+//			recordArea.setReadPosition(dummy + 1);
+//			dummy = recordArea.readLong();
+		}
+	}
+
 	/**
 	 * Searches the hash table for the record with matching key, and updates it (making one reduce step) if found,
 	 * otherwise inserts a new entry.
@@ -362,20 +410,59 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * @param record The record to be processed.
 	 */
 	public void processRecordWithReduce(T record) throws Exception {
-		T match = prober.getMatchFor(record, reuse);
-		if (match == null) {
-			prober.insertAfterNoMatch(record);
-		} else {
-			// do the reduce step
-			T res = reducer.reduce(match, record);
+//		T match = prober.getMatchFor(record, reuse);
+//		if (match == null) {
+//			prober.insertAfterNoMatch(record);
+//		} else {
+//			// do the reduce step
+//			T res = reducer.reduce(match, record);
+//
+//			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+//			if (!objectReuseEnabled) {
+//				reuse = buildSideSerializer.createInstance();
+//			}
+//
+//			prober.updateMatch(res);
+//		}
 
-			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
-			if (!objectReuseEnabled) {
-				reuse = buildSideSerializer.createInstance();
+
+
+
+		final int bucketSegmentIndex = prevBucketSegmentIndex;
+		final int bucketOffset = prevBucketOffset;
+		final MemorySegment bucketSegment = prevBucketSegment;
+
+		//prefetch(record);
+		prefetchXXX(record);
+
+		if (prev != null) {
+			// process prev
+
+			//T match = prober.getMatchFor(prev, reuse);
+			T match = prober.getMatchForXXX(prev, reuse, bucketSegmentIndex, bucketOffset, bucketSegment);
+			if (match == null) {
+				prober.insertAfterNoMatch(prev);
+			} else {
+				// do the reduce step
+				T res = reducer.reduce(match, prev);
+
+				// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+				if (!objectReuseEnabled) {
+					reuse = buildSideSerializer.createInstance();
+				}
+
+				prober.updateMatch(res);
 			}
 
-			prober.updateMatch(res);
+			// switch
+			prev = buildSideSerializer.copy(record, prev);
+		} else {
+			prev = buildSideSerializer.createInstance();
+			prev = buildSideSerializer.copy(record, prev);
 		}
+		//todo: az utolso nem emittalodik igy most
+
+
 	}
 
 	/**
@@ -803,6 +890,10 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 			return inView.readLong();
 		}
 
+		public byte readByte() throws IOException {
+			return inView.readByte();
+		}
+
 		public T readRecord(T reuse) throws IOException {
 			return buildSideSerializer.deserialize(reuse, inView);
 		}
@@ -876,6 +967,38 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		private long prevElemPtr;
 		private long nextPtr;
 		private long recordEnd;
+
+		public T getMatchForXXX(PT record, T targetForMatch, int bucketSegmentIndex, int bucketOffset, MemorySegment bucketSegment) {
+			this.bucketSegmentIndex = bucketSegmentIndex;
+			this.bucketOffset = bucketOffset;
+
+			this.curElemPtr = bucketSegment.getLong(bucketOffset);
+
+			pairComparator.setReference(record);
+
+			T currentRecordInList = targetForMatch;
+
+			prevElemPtr = INVALID_PREV_POINTER;
+			try {
+				while (curElemPtr != END_OF_LIST) {
+					recordArea.setReadPosition(curElemPtr);
+					nextPtr = recordArea.readLong();
+
+					currentRecordInList = recordArea.readRecord(currentRecordInList);
+					recordEnd = recordArea.getReadPosition();
+					if (pairComparator.equalToReference(currentRecordInList)) {
+						// we found an element with a matching key, and not just a hash collision
+						return currentRecordInList;
+					}
+
+					prevElemPtr = curElemPtr;
+					curElemPtr = nextPtr;
+				}
+			} catch (IOException ex) {
+				throw new RuntimeException("Error deserializing record from the hashtable: " + ex.getMessage(), ex);
+			}
+			return null;
+		}
 
 		/**
 		 * Searches the hash table for the record with the given key.

@@ -225,49 +225,49 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 	 * @param record The record to be processed.
 	 */
 	public void processRecordWithReduce(T record) throws Exception {
-//		T match = prober.getMatchFor(record, reuse);
-//		if (match == null) {
-//			prober.insertAfterNoMatch(record);
-//		} else {
-//			// do the reduce step
-//			T res = reducer.reduce(match, record);
-//
-//			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
-//			if (!objectReuseEnabled) {
-//				reuse = buildSideSerializer.createInstance();
-//			}
-//
-//			prober.updateMatch(res);
-//		}
+		T match = prober.getMatchFor(record, reuse);
+		if (match == null) {
+			prober.insertAfterNoMatch(record);
+		} else {
+			// do the reduce step
+			T res = reducer.reduce(match, record);
 
-
-
-
-		prefetch(record);
-
-		if (prev != null) {
-			// process prev
-			T match = prober.getMatchFor(prev, reuse);
-			if (match == null) {
-				prober.insertAfterNoMatch(prev);
-			} else {
-				// do the reduce step
-				T res = reducer.reduce(match, prev);
-
-				// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
-				if (!objectReuseEnabled) {
-					reuse = buildSideSerializer.createInstance();
-				}
-
-				prober.updateMatch(res);
+			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+			if (!objectReuseEnabled) {
+				reuse = buildSideSerializer.createInstance();
 			}
 
-			// switch
-			prev = buildSideSerializer.copy(record, prev);
-		} else {
-			prev = buildSideSerializer.createInstance();
+			prober.updateMatch(res);
 		}
-		//todo: az utolso nem emittalodik igy most
+
+
+
+
+//		prefetch(record);
+//
+//		if (prev != null) {
+//			// process prev
+//			T match = prober.getMatchFor(prev, reuse);
+//			if (match == null) {
+//				prober.insertAfterNoMatch(prev);
+//			} else {
+//				// do the reduce step
+//				T res = reducer.reduce(match, prev);
+//
+//				// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+//				if (!objectReuseEnabled) {
+//					reuse = buildSideSerializer.createInstance();
+//				}
+//
+//				prober.updateMatch(res);
+//			}
+//
+//			// switch
+//			prev = buildSideSerializer.copy(record, prev);
+//		} else {
+//			prev = buildSideSerializer.createInstance();
+//		}
+//		//todo: az utolso nem emittalodik igy most
 	}
 
 	/**

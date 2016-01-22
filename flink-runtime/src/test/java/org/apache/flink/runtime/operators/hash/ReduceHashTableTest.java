@@ -307,7 +307,7 @@ public class ReduceHashTableTest {
 		// (because of cache misses (also in the segment arrays))
 		final int keyRange = 1000000; //////////////////////////////1000000
 		final int valueRange = 10;
-		final int numRecords = 40000000; //////////////////////////////1000000
+		final int numRecords = 60000000; //////////////////////////////1000000
 
 		final IntPairSerializer serializer = new IntPairSerializer();
 		final TypeComparator<IntPair> comparator = new IntPairComparator();
@@ -322,8 +322,8 @@ public class ReduceHashTableTest {
 		final int numMemPages = keyRange * 32 / PAGE_SIZE; // memory use is proportional to the number of different keys
 		List<IntPair> actualOutput = new ArrayList<>();
 
-		//ReduceHashTable<IntPair> table = new ReduceHashTable<>( ////////////////////////////////////////////
-		OpenAddressingHashTable<IntPair> table = new OpenAddressingHashTable<>( ////////////////////////////////////////////
+		ReduceHashTable<IntPair> table = new ReduceHashTable<>( ////////////////////////////////////////////
+		//OpenAddressingHashTable<IntPair> table = new OpenAddressingHashTable<>( ////////////////////////////////////////////
 			serializer, comparator, getMemory(numMemPages, PAGE_SIZE), reducer,
 			new CopyingListCollector<>(actualOutput, serializer), true);
 		table.open();
