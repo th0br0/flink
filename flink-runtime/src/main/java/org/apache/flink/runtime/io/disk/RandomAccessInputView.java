@@ -69,6 +69,40 @@ public class RandomAccessInputView extends AbstractPagedInputView implements See
 		seekInput(this.segments.get(bufferNum), offset, bufferNum < this.segments.size() - 1 ? this.segmentSize : this.limitInLastSegment);
 	}
 
+	public static final class SeekPrefetch {
+		private int currentSegmentIndex;
+		public MemorySegment segment;
+		public int positionInSegment;
+		public int limitInSegment;
+
+		public SeekPrefetch(int currentSegmentIndex, MemorySegment segment, int positionInSegment, int limitInSegment) {
+			this.currentSegmentIndex = currentSegmentIndex;
+			this.segment = segment;
+			this.positionInSegment = positionInSegment;
+			this.limitInSegment = limitInSegment;
+		}
+
+		public SeekPrefetch() {
+		}
+	}
+
+	public void prefetchSeek(long position, SeekPrefetch prefetch) {
+		final int bufferNum = (int) (position >>> this.segmentSizeBits);
+		final int offset = (int) (position & this.segmentSizeMask);
+
+		prefetch.currentSegmentIndex = bufferNum;
+		prefetch.segment = this.segments.get(bufferNum);
+		prefetch.positionInSegment = offset;
+		prefetch.limitInSegment = bufferNum < this.segments.size() - 1 ? this.segmentSize : this.limitInLastSegment;
+	}
+
+	public void seekToPrefetched(SeekPrefetch prefetch) {
+		currentSegmentIndex = prefetch.currentSegmentIndex;
+		seekInput(prefetch.segment, prefetch.positionInSegment, prefetch.limitInSegment);
+	}
+
+
+
 	public long getReadPosition() {
 		return (((long) currentSegmentIndex) << segmentSizeBits) + getCurrentPositionInSegment();
 	}

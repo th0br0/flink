@@ -23,12 +23,9 @@ import org.apache.flink.api.common.typeutils.SameTypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeComparator;
 import org.apache.flink.api.common.typeutils.TypePairComparator;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.disk.RandomAccessInputView;
 import org.apache.flink.runtime.io.disk.RandomAccessOutputView;
-import org.apache.flink.runtime.memory.AbstractPagedOutputView;
-import org.apache.flink.runtime.util.MathUtils;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.MutableObjectIterator;
 import org.slf4j.Logger;
@@ -166,6 +163,12 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 		}
 
 		reuse = buildSideSerializer.createInstance();
+
+		for (int i = 0; i < bSize; i++) {
+			bRecords[i] = buildSideSerializer.createInstance();
+			seekPrefetches[i] = new RandomAccessInputView.SeekPrefetch();
+			seekPrefetches2[i] = new RandomAccessInputView.SeekPrefetch();
+		}
 	}
 
 	@Override
@@ -181,6 +184,8 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 		LOG.debug("Closing OpenAdressingHashTable.");
 
 		numElements = 0;
+
+		bNum = 0;
 	}
 
 	@Override
@@ -208,6 +213,17 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 		return code >= 0 ? code : -(code + 1);
 	}
 
+
+
+
+	private static final int bSize = 32;
+	//public int bSize = 8;
+
+	private final Object[] bRecords = new Object[bSize];
+	private int bNum = 0;
+	private final RandomAccessInputView.SeekPrefetch[] seekPrefetches = new RandomAccessInputView.SeekPrefetch[bSize];
+	private final RandomAccessInputView.SeekPrefetch[] seekPrefetches2 = new RandomAccessInputView.SeekPrefetch[bSize];
+
 	/**
 	 * Searches the hash table for the record with matching key, and updates it (making one reduce step) if found,
 	 * otherwise inserts a new entry.
@@ -217,21 +233,79 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 	 * @param record The record to be processed.
 	 */
 	public void processRecordWithReduce(T record) throws Exception {
-		T match = prober.getMatchFor(record, reuse);
-		if (match == null) {
-			prober.insertAfterNoMatch(record);
-		} else {
-			// do the reduce step
-			T res = reducer.reduce(match, record);
+//		T match = prober.getMatchFor(record, reuse);
+//		if (match == null) {
+//			prober.insertAfterNoMatch(record);
+//		} else {
+//			// do the reduce step
+//			T res = reducer.reduce(match, record);
+//
+//			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+//			if (!objectReuseEnabled) {
+//				reuse = buildSideSerializer.createInstance();
+//			}
+//
+//			prober.updateMatch(res);
+//		}
 
-			// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
-			if (!objectReuseEnabled) {
-				reuse = buildSideSerializer.createInstance();
-			}
 
-			prober.updateMatch(res);
+
+
+		if (bNum == bSize) {
+			processBatch();
 		}
+
+		bRecords[bNum] = buildSideSerializer.copy(record, (T)bRecords[bNum]);
+		bNum++;
 	}
+
+	public byte dummy;
+
+	private void processBatch() throws Exception {
+		for (int i = 0; i < bSize; i++) {
+			final int hashCode = hash(buildSideComparator.hash((T)bRecords[i]));
+			final int bucketInd = hashCode % numBuckets;
+			inView.prefetchSeek((long)bucketInd * bucketSize, seekPrefetches[i]);
+
+//			if (bucketInd < numBuckets - 8) {
+//				inView.prefetchSeek((long) bucketInd * bucketSize + 64, seekPrefetches2[i]);
+//			} else {
+//				inView.prefetchSeek((long) bucketInd * bucketSize, seekPrefetches2[i]);
+//			}
+		}
+
+		for (int i = 0; i < bSize; i++) {
+			inView.seekToPrefetched(seekPrefetches[i]);
+			//dummy = inView.peakByteAfterSeek();
+			inView.prefetchRead();
+
+//			inView.seekToPrefetched(seekPrefetches2[i]);
+//			inView.prefetchRead();
+		}
+
+		for (int i = 0; i < bSize; i++) {
+			T record = (T)bRecords[i];
+			T match = prober.getMatchForPrefetched(record, reuse, seekPrefetches[i]);
+			if (match == null) {
+				prober.insertAfterNoMatch(record);
+			} else {
+				// do the reduce step
+				T res = reducer.reduce(match, record);
+
+				// We have given reuse to the reducer UDF, so create new one if object reuse is disabled
+				if (!objectReuseEnabled) {
+					reuse = buildSideSerializer.createInstance();
+				}
+
+				prober.updateMatch(res);
+			}
+		}
+
+		bNum = 0;
+	}
+
+
+
 
 	/**
 	 * Searches the hash table for a record with the given key.
@@ -368,6 +442,35 @@ public final class OpenAddressingHashTable<T> extends AbstractMutableHashTable<T
 			final int bucketInd = hashCode % numBuckets;
 
 			inView.setReadPosition((long)bucketInd * bucketSize);
+
+			pairComparator.setReference(record);
+
+			try {
+				while (true) {
+					if (inView.readBoolean()) {
+						targetForMatch = buildSideSerializer.deserialize(targetForMatch, inView);
+						matchPtr = inView.getReadPosition();
+						if (matchPtr == bucketsEnd) {
+							// wraparound
+							inView.setReadPosition(0);
+							matchPtr = 0;
+						}
+						if (pairComparator.equalToReference(targetForMatch)) {
+							// we found an element with a matching key, and not just a collision
+							return targetForMatch;
+						}
+					} else {
+						matchPtr = inView.getReadPosition() - 1; // the -1 is because we already read the bool
+						return null;
+					}
+				}
+			} catch (IOException ex) {
+				throw new RuntimeException("Error deserializing record from the hashtable: " + ex.getMessage(), ex);
+			}
+		}
+
+		public T getMatchForPrefetched(PT record, T targetForMatch, RandomAccessInputView.SeekPrefetch prefetch) {
+			inView.seekToPrefetched(prefetch);
 
 			pairComparator.setReference(record);
 

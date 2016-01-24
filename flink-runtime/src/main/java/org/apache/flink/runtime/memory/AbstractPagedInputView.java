@@ -274,6 +274,14 @@ public abstract class AbstractPagedInputView implements DataInputView {
 		}
 	}
 
+	public byte peakByteAfterSeek() throws IOException {
+		return this.currentSegment.get(this.positionInSegment);
+	}
+
+	public void prefetchRead() {
+		this.currentSegment.prefetchRead(this.positionInSegment);
+	}
+
 	@Override
 	public int readUnsignedByte() throws IOException {
 		return readByte() & 0xff;

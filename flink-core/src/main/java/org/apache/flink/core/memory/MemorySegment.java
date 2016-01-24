@@ -1287,4 +1287,9 @@ public abstract class MemorySegment {
 					String.format("offset1=%d, offset2=%d, len=%d, bufferSize=%d, address1=%d, address2=%d",
 							offset1, offset2, len, tempBuffer.length, this.address, seg2.address));
 	}
+
+	public final void prefetchRead(int index) {
+		final long pos = address + index;
+		UNSAFE.prefetchRead(heapMemory, pos);
+	}
 }
