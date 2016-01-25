@@ -216,6 +216,11 @@ public class GameState implements Comparable<GameState>, Serializable, KryoSeria
 		public boolean equals(Object o) {
 			return o instanceof GameStateSerializer;
 		}
+
+		@Override
+		public boolean canEqual(Object obj) {
+			return obj instanceof GameStateSerializer;
+		}
 	}
 
 }

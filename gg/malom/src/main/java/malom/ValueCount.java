@@ -155,5 +155,10 @@ public class ValueCount implements Serializable {
 		public boolean equals(Object o) {
 			return o instanceof ValueCountSerializer;
 		}
+
+		@Override
+		public boolean canEqual(Object obj) {
+			return obj instanceof ValueCountSerializer;
+		}
 	}
 }
