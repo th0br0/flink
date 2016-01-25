@@ -26,6 +26,7 @@ import org.apache.flink.runtime.operators.chaining.ChainedAllReduceDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedFlatMapDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedMapDriver;
+import org.apache.flink.runtime.operators.chaining.ChainedReduceCombineDriver;
 import org.apache.flink.runtime.operators.chaining.SynchronousChainedCombineDriver;
 
 /**
@@ -61,7 +62,7 @@ public enum DriverStrategy {
 	SORTED_PARTIAL_REDUCE(ReduceCombineDriver.class, null, MATERIALIZING, 1),
 
 	// hashed partial reduce is a combiner for the Reduce
-	HASHED_PARTIAL_REDUCE(ReduceCombineDriver.class, null, MATERIALIZING, 1),
+	HASHED_PARTIAL_REDUCE(ReduceCombineDriver.class, ChainedReduceCombineDriver.class, MATERIALIZING, 1),
 	
 	// grouping the inputs and apply the GroupReduce function
 	SORTED_GROUP_REDUCE(GroupReduceDriver.class, null, PIPELINED, 1),
