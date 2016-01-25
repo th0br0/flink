@@ -298,8 +298,8 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 	public TypeSerializer<T> createSerializer(ExecutionConfig config) {
 
 		///
-		if(customSerializers.containsKey(this.typeClass)) {
-			return InstantiationUtil.instantiate(customSerializers.get(this.typeClass));
+		if(customSerializers.containsKey(this.getTypeClass())) {
+			return InstantiationUtil.instantiate(customSerializers.get(this.getTypeClass()));
 		}
 		///
 
