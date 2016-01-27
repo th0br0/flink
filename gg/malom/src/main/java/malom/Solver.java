@@ -30,7 +30,12 @@ public class Solver {
 		retrograde.solve(new SectorId(3,4,0,0));
 		//sectorGraph.solve(new SectorId(5,5,0,0));
 
+		long start = System.currentTimeMillis();
+
 		env.execute();
 		//System.out.println(env.getExecutionPlan());
+
+		long end = System.currentTimeMillis();
+        System.out.println("time: " + (end - start) + "ms");
 	}
 }

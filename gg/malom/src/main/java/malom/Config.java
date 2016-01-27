@@ -11,7 +11,7 @@ public class Config {
 	static final boolean filterSym = true; // Filter by symmetries of the board (reduces state space to almost 1/16)
 
 
-	static String outPath;
+	static String outPath; // The directory where output files will be placed.
 	static String verifyOutPath(SectorId sector) {
 		return Paths.get(Config.outPath, "verif", sector.toString()).toString();
 	}
