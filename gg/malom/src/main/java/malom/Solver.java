@@ -27,8 +27,9 @@ public class Solver {
 
 		//Retrograde retrograde = new Retrograde(env);
 		RetrogradeWithoutGelly retrograde = new RetrogradeWithoutGelly(env);
-		retrograde.solve(new SectorId(3,4,0,0));
+		//retrograde.solve(new SectorId(3,4,0,0));
 		//sectorGraph.solve(new SectorId(5,5,0,0));
+		retrograde.solve(new SectorId(Integer.parseInt(args[1]),Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4])));
 
 		long start = System.currentTimeMillis();
 
