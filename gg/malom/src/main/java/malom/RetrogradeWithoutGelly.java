@@ -184,7 +184,7 @@ public class RetrogradeWithoutGelly implements Serializable {
 					}
 				})
 				//.groupBy(0).sum(1)
-				.groupBy(0).reduce(new SumReducer<GameState>())
+				.groupBy(0).reduce(new SumReducer<>())
 				.coGroup(vertices).where(0).equalTo(0).with(new CoGroupFunction<Tuple2<GameState, Short>, Tuple2<GameState, ValueCount>, Tuple2<GameState, Short>>() {
 					@Override
 					public void coGroup(Iterable<Tuple2<GameState, Short>> first, Iterable<Tuple2<GameState, ValueCount>> second, Collector<Tuple2<GameState, Short>> out) throws Exception {

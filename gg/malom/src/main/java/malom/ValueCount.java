@@ -83,7 +83,7 @@ public class ValueCount implements Serializable {
 				'}';
 	}
 
-	static public class ValueCountSerializer extends TypeSerializer<ValueCount> {
+	static public final class ValueCountSerializer extends TypeSerializer<ValueCount> {
 		@Override
 		public boolean isImmutableType() {
 			return false;

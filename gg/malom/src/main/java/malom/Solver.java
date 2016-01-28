@@ -17,13 +17,11 @@ public class Solver {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		//env.setParallelism(1);
-		//env.getConfig().enableObjectReuse(); // has only negligible impact on the Gelly version
+		//env.getConfig().enableObjectReuse(); // seems to have only negligible impact
 
 		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
-
-		// TODO: test speed with and without assertions
-
+		PojoTypeInfo.registerCustomSerializer(Value.class, Value.ValueSerializer.class);
 
 		//Retrograde retrograde = new Retrograde(env);
 		RetrogradeWithoutGelly retrograde = new RetrogradeWithoutGelly(env);
