@@ -1,5 +1,10 @@
 package malom;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataOutputView;
+
+import java.io.IOException;
 import java.io.Serializable;
 
 public class Value implements Serializable {
@@ -66,5 +71,77 @@ public class Value implements Serializable {
 				"value=" + value +
 				", depth=" + depth +
 				'}';
+	}
+
+	static public final class ValueSerializer extends TypeSerializer<Value> {
+		@Override
+		public boolean isImmutableType() {
+			return false;
+		}
+
+		@Override
+		public TypeSerializer<Value> duplicate() {
+			return this;
+		}
+
+		@Override
+		public Value createInstance() {
+			return new Value();
+		}
+
+		@Override
+		public Value copy(Value from) {
+			return new Value(from.value, from.depth);
+		}
+
+		@Override
+		public Value copy(Value from, Value reuse) {
+			reuse.value = from.value;
+			reuse.depth = from.depth;
+			return reuse;
+		}
+
+		@Override
+		public int getLength() {
+			return 3;
+		}
+
+		@Override
+		public void serialize(Value record, DataOutputView target) throws IOException {
+			target.writeByte(record.value);
+			target.writeShort(record.depth);
+		}
+
+		@Override
+		public Value deserialize(DataInputView source) throws IOException {
+			return new Value(source.readByte(), source.readShort());
+		}
+
+		@Override
+		public Value deserialize(Value reuse, DataInputView source) throws IOException {
+			reuse.value = source.readByte();
+			reuse.depth = source.readShort();
+			return reuse;
+		}
+
+		@Override
+		public void copy(DataInputView source, DataOutputView target) throws IOException {
+			target.write(source, getLength());
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ValueSerializer;
+		}
+
+		@Override
+		public boolean canEqual(Object obj) {
+			return obj instanceof ValueSerializer;
+		}
+
+		@Override
+		public int hashCode() {
+			return getClass().hashCode();
+		}
 	}
 }

@@ -123,7 +123,7 @@ public class GameState implements Comparable<GameState>, Serializable, KryoSeria
 		this.board = in.readLong();
 	}
 
-	static public class GameStateSerializer extends TypeSerializer<GameState> {
+	static public final class GameStateSerializer extends TypeSerializer<GameState> {
 		@Override
 		public boolean isImmutableType() {
 			return false;
