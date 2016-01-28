@@ -135,6 +135,17 @@ public class RetrogradeWithoutGelly implements Serializable {
 		return ret;
 	}
 
+	private static final class SumReducer<K> implements ReduceFunction<Tuple2<K, Short>> {
+		@Override
+		public Tuple2<K, Short> reduce(Tuple2<K, Short> a, Tuple2<K, Short> b) throws Exception {
+			if (!a.f0.equals(b.f0)) {
+				throw new RuntimeException("SumReducer was called with two record that have differing keys.");
+			}
+			a.f1 = (short)(a.f1 + b.f1);
+			return a;
+		}
+	}
+
 	/**
 	 * Calculate in-degrees, and initialize all states in the sector family:
 	 *	- child sectors:
@@ -167,7 +178,8 @@ public class RetrogradeWithoutGelly implements Serializable {
 						return Tuple2.of(t.f1, (short) 1);
 					}
 				})
-				.groupBy(0).sum(1)
+				//.groupBy(0).sum(1)
+				.groupBy(0).reduce(new SumReducer<GameState>())
 				.coGroup(vertices).where(0).equalTo(0).with(new CoGroupFunction<Tuple2<GameState, Short>, Tuple2<GameState, ValueCount>, Tuple2<GameState, Short>>() {
 					@Override
 					public void coGroup(Iterable<Tuple2<GameState, Short>> first, Iterable<Tuple2<GameState, ValueCount>> second, Collector<Tuple2<GameState, Short>> out) throws Exception {
