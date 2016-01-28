@@ -52,10 +52,11 @@ public class SectorElementIterator implements Iterator<GameState>, Serializable 
 	private long uncollapse(int w, int b){
 		int r=0;
 		for(int i=1; i<1<<24; i<<=1)
-			if((w&i) != 0)
-				b<<=1;
-			else
-				r|=b&i;
+			if((w&i) != 0) {
+				b <<= 1;
+			} else {
+				r |= b & i;
+			}
 		return ((long)r<<24)|w;
 	}
 }
