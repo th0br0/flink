@@ -97,14 +97,17 @@ public class SectorId implements Serializable, Comparable<SectorId> {
 
 	@Override
 	public int compareTo(SectorId o) {
-		if(w != o.w)
-			return ((Byte)w).compareTo(o.w);
-		else if(b != o.b)
-			return ((Byte)b).compareTo(o.b);
-		else if(wf != o.wf)
-			return ((Byte)wf).compareTo(o.wf);
-		else
-			return ((Byte)bf).compareTo(o.bf);
+		if(w != o.w) {
+			return ((Byte) w).compareTo(o.w);
+		} else {
+			if (b != o.b) {
+				return ((Byte) b).compareTo(o.b);
+			} else if (wf != o.wf) {
+				return ((Byte) wf).compareTo(o.wf);
+			} else {
+				return ((Byte) bf).compareTo(o.bf);
+			}
+		}
 	}
 
 	@Override

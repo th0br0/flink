@@ -1,6 +1,8 @@
 package malom;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 /**
  * This class represents the subdivision of the state space into sectors.

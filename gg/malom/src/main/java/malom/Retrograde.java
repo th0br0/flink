@@ -20,7 +20,14 @@ import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.List;
+
 
 public class Retrograde implements Serializable {
 	private static final long serialVersionUID = 1L;

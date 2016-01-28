@@ -5,26 +5,12 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 
-import java.io.Externalizable;
 import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 import java.io.Serializable;
-
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.UTFDataFormatException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
-import org.apache.flink.core.memory.DataInputView;
-import org.apache.flink.core.memory.DataOutputView;
-import org.apache.flink.core.memory.MemoryUtils;
 
 /**
  * To identify a game state, we need to know where and what pieces are on the board,
@@ -57,10 +43,11 @@ public class GameState implements Comparable<GameState>, Serializable, KryoSeria
 
 	@Override
 	public int compareTo(GameState o) {
-		if(!sid.equals(o.sid))
+		if(!sid.equals(o.sid)) {
 			return sid.compareTo(o.sid);
-		else
-			return ((Long)board).compareTo(o.board);
+		} else {
+			return ((Long) board).compareTo(o.board);
+		}
 	}
 
 	@Override

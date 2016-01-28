@@ -68,10 +68,13 @@ public class Movegen implements Serializable {
 //			for(int i = 0; i < millpos.length; i++)
 //				if((a & millpos[i]) == millpos[i])
 //					millmasks[a] |= millpos[i];
-		for(int a = 0; a < 1<<24; a++)
-			for (int mp : millpos)
-				if ((a & mp) == mp)
+		for(int a = 0; a < 1<<24; a++) {
+			for (int mp : millpos){
+				if ((a & mp) == mp) {
 					millmasks[a] |= mp;
+				}
+			}
+		}
 
 		System.out.println("  untakemasks");
 		for(int a = 0; a < 1<<24; a++){
@@ -82,8 +85,9 @@ public class Movegen implements Serializable {
 				if (Integer.bitCount(amp) == 2) { //ket korongos malompozicio
 					//azt kell meg ellenorizni, hogy csak akkor ussuk ki a mezot, ha nem lenne minden malomban, ha oda visszatennenk a korongot
 					int mm = amp ^ mp; //a mezo maskja
-					if (!(millmasks[a | mm] == (a | mm)))
+					if (!(millmasks[a | mm] == (a | mm))) {
 						r &= ~mp;
+					}
 				}
 			}
 
@@ -94,8 +98,9 @@ public class Movegen implements Serializable {
 		for(int a=0; a<1<<24; a++){
 			for (int m : millpos) {
 				int am = a & m;
-				if (Integer.bitCount(am) == 2)
+				if (Integer.bitCount(am) == 2) {
 					millclosemasks[a] |= m ^ am;
+				}
 			}
 		}
 
@@ -158,10 +163,10 @@ public class Movegen implements Serializable {
 					felrak_kle = b > 0 && w < Config.maxPieceCount && bf < Config.maxPieceCount ?
 							new SectorId((byte)(b-1), (byte)(w+1), (byte)(bf+1), wf) //wms_wm_bp_wfp_bf
 							: null;
-			if(mainSectors.contains(mozg)) a.mozg=mozg;
-			if(mainSectors.contains(felrak)) a.felrak=felrak;
-			if(mainSectors.contains(mozg_kle)) a.mozg_kle=mozg_kle;
-			if(mainSectors.contains(felrak_kle)) a.felrak_kle=felrak_kle;
+			if(mainSectors.contains(mozg)){ a.mozg=mozg;}
+			if(mainSectors.contains(felrak)){ a.felrak=felrak;}
+			if(mainSectors.contains(mozg_kle)){ a.mozg_kle=mozg_kle;}
+			if(mainSectors.contains(felrak_kle)){ a.felrak_kle=felrak_kle;}
 			adjs[s.w][s.b][s.wf][s.bf] = a;
 		}
 	}
@@ -190,13 +195,15 @@ public class Movegen implements Serializable {
 
 		long cpmills = millmasks[(int)(a&mask24)]; //cp malomban levo korongjai
 		long can_untake_mask = 0; //azok a poziciok, ahova rakhatunk vissza korongot
-		if(cpmills != 0)
-			can_untake_mask=(untakemasks[(int)(a>>24)]&free)<<24; //erre csak akkor lesz szukseg, ha van malom, amit esetleg kinyithatunk (itt meg lehetne gyorsitani, ha eltarolnank egy lookup table-ben azt is, hogy lehet-e malmot kinyitni (merthogy a blokkolasok miatt ez nem biztos jelenleg))
+		if(cpmills != 0) {
+			can_untake_mask = (untakemasks[(int) (a >> 24)] & free) << 24; //erre csak akkor lesz szukseg, ha van malom, amit esetleg kinyithatunk (itt meg lehetne gyorsitani, ha eltarolnank egy lookup table-ben azt is, hogy lehet-e malmot kinyitni (merthogy a blokkolasok miatt ez nem biztos jelenleg))
+		}
 
 		long cp=a&mask24; //cp korongjai, kiveve ld. az alabbi sort  (a ciklus megeszi!)
 
-		if(b+bf==Config.maxPieceCount)
-			cp^=cpmills; //ha b+bf maxPieceCount fole menne, akkor nem csinalhatunk vissza malombecsukast
+		if(b+bf==Config.maxPieceCount) {
+			cp ^= cpmills; //ha b+bf maxPieceCount fole menne, akkor nem csinalhatunk vissza malombecsukast
+		}
 
 		////int[] adjmasks = w+wf>3 ? slide_adjmasks : fly_adjmasks; //javitottuk b-rol w-re  //(tovabba nem valtozik meg a lepesed soran)
 		int[] adjmasks = slide_adjmasks;

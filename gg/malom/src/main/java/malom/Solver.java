@@ -37,6 +37,6 @@ public class Solver {
 		//System.out.println(env.getExecutionPlan());
 
 		long end = System.currentTimeMillis();
-        System.out.println("time: " + (end - start) + "ms");
+		System.out.println("time: " + (end - start) + "ms");
 	}
 }
