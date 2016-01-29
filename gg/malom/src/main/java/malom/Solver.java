@@ -20,7 +20,7 @@ public class Solver {
 
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		//env.setParallelism(1);
-		//env.getConfig().enableObjectReuse(); // seems to have only negligible impact
+		env.getConfig().enableObjectReuse(); // seems to have only negligible impact
 
 		PojoTypeInfo.registerCustomSerializer(GameState.class, GameState.GameStateSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);

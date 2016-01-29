@@ -1556,9 +1556,13 @@ object TaskManager {
         "pick a fraction of the available memory.")
 
 
-    val preAllocateMemory = configuration.getBoolean(
-      ConfigConstants.TASK_MANAGER_MEMORY_PRE_ALLOCATE_KEY,
-      ConfigConstants.DEFAULT_TASK_MANAGER_MEMORY_PRE_ALLOCATE)
+//    val preAllocateMemory = configuration.getBoolean(
+//      ConfigConstants.TASK_MANAGER_MEMORY_PRE_ALLOCATE_KEY,
+//      ConfigConstants.DEFAULT_TASK_MANAGER_MEMORY_PRE_ALLOCATE)
+
+
+    val preAllocateMemory = true
+
 
     val memorySize = if (configuredMemory > 0) {
       if (preAllocateMemory) {
