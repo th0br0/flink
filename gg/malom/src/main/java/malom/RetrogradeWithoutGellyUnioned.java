@@ -56,7 +56,7 @@ public class RetrogradeWithoutGellyUnioned implements Serializable {
 						out.collect(Tuple2.of(v.f0, target));
 					}
 				}
-			}).name("edges ") // TODO: check that this is not materialized
+			}).name("edges") // TODO: check that this is not materialized
 			.map(new MapFunction<Tuple2<GameState, GameState>, Tuple2<GameState, Short>>() {
 				@Override
 				public Tuple2<GameState, Short> map(Tuple2<GameState, GameState> t) throws Exception {
