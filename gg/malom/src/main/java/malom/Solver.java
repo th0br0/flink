@@ -15,6 +15,9 @@ public class Solver {
 
 		Config.outPath = args[0];
 
+		SectorId rootSector = new SectorId(Integer.parseInt(args[1]),Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4]));
+
+
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		//env.setParallelism(1);
 		//env.getConfig().enableObjectReuse(); // seems to have only negligible impact
@@ -23,11 +26,15 @@ public class Solver {
 		PojoTypeInfo.registerCustomSerializer(ValueCount.class, ValueCount.ValueCountSerializer.class);
 		PojoTypeInfo.registerCustomSerializer(Value.class, Value.ValueSerializer.class);
 
+
+
 		//Retrograde retrograde = new Retrograde(env);
-		RetrogradeWithoutGelly retrograde = new RetrogradeWithoutGelly(env);
-		//retrograde.solve(new SectorId(3,4,0,0));
-		//sectorGraph.solve(new SectorId(5,5,0,0));
-		retrograde.solve(new SectorId(Integer.parseInt(args[1]),Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4])));
+
+//		RetrogradeWithoutGelly retrograde = new RetrogradeWithoutGelly();
+//		retrograde.solve(rootSector, env);
+
+		RetrogradeWithoutGellyUnioned.solve(rootSector, env);
+
 
 		long start = System.currentTimeMillis();
 

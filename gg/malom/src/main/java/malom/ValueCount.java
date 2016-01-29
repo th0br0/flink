@@ -18,6 +18,8 @@ import java.io.Serializable;
 public class ValueCount implements Serializable {
 	private static final long serialVersionUID = 1L;
 
+	private static final short NULL_COUNT = -2;
+
 	public Value value = Value.getNull();
 	public short count = -1;
 
@@ -54,8 +56,16 @@ public class ValueCount implements Serializable {
 		return !value.isNull();
 	}
 
-	public boolean isCount(){
+	public boolean isCount() {
 		return count != -1;
+	}
+
+	public boolean isNull() {
+		return count == NULL_COUNT;
+	}
+
+	public static ValueCount getNull() {
+		return new ValueCount(Value.getNull(), NULL_COUNT);
 	}
 
 	@Override
