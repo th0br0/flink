@@ -31,8 +31,19 @@ public class SectorGraph {
 		sectorFamily.addAll(chdSectors);
 	}
 
+	public static void dfs(SectorId u, Set<SectorId> res) {
+		if (!res.contains(u)) {
+			res.add(u);
+			if (!u.isLosing()) {
+				for (SectorId chd : SectorGraph.graphFunc(u)) {
+					dfs(chd, res);
+				}
+			}
+		}
+	}
+
 	// Returns the outgoing edges from a sector
-	public static List<SectorId> graphFunc(SectorId u) {
+	private static List<SectorId> graphFunc(SectorId u) {
 		List<SectorId> r0 = graphFunc0(u);
 		List<SectorId> r = new ArrayList<>();
 		for (SectorId x : r0) {
@@ -62,7 +73,7 @@ public class SectorGraph {
 			v.get(1).b--;
 		} else { // Moving a stone
 			v.get(1).b--; // Taking a stone
-			// (sectorId doesn't chang when we don't take a stone) (negation will be handled by graphFunc)
+			// (sectorId doesn't change when we don't take a stone) (negation will be handled by graphFunc)
 		}
 
 		return v;

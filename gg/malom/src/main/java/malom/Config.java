@@ -18,4 +18,7 @@ public class Config {
 	static String resultOutPath(SectorId sector) {
 		return Paths.get(Config.outPath, "res", sector.toString()).toString();
 	}
+	static String resultOutPathUnioned(SectorId sector) {
+		return Paths.get(Config.outPath, "res_unioned", sector.toString()).toString();
+	}
 }
