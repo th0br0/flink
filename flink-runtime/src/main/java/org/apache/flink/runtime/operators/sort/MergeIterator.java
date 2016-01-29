@@ -45,44 +45,32 @@ public class MergeIterator<E> implements MutableObjectIterator<E> {
 	 * @param comparator
 	 * @throws IOException
 	 */
-	public MergeIterator(List<MutableObjectIterator<E>> iterators, TypeComparator<E> comparator) throws IOException {
+	public MergeIterator(List<MutableObjectIterator<E>> iterators, TypeComparator<E> comparator, TypeSerializer<E> serializer) throws IOException {
 		this.heap = new PartialOrderPriorityQueue<HeadStream<E>>(new HeadStreamComparator<E>(), iterators.size());
 		
 		for (MutableObjectIterator<E> iterator : iterators) {
-			this.heap.add(new HeadStream<E>(iterator, comparator.duplicate()));
+			this.heap.add(new HeadStream<E>(iterator, comparator.duplicate(), serializer.duplicate()));
 		}
 	}
 
 	/**
 	 * Gets the next smallest element, with respect to the definition of order implied by
-	 * the {@link TypeSerializer} provided to this iterator.
-	 * 
+	 * the {@link TypeComparator} provided to this iterator.
+	 *
 	 * @param reuse Object that may be reused.
 	 * @return The next element if the iterator has another element, null otherwise.
-	 * 
+	 *
 	 * @see org.apache.flink.util.MutableObjectIterator#next(java.lang.Object)
 	 */
 	@Override
 	public E next(E reuse) throws IOException {
-		/* There are three ways to handle object reuse:
-		 * 1) reuse and return the given object
-		 * 2) ignore the given object and return a new object
-		 * 3) exchange the given object for an existing object
-		 *
-		 * The first option is not available here as the return value has
-		 * already been deserialized from the heap's top iterator. The second
-		 * option avoids object reuse. The third option is implemented below
-		 * by passing the given object to the heap's top iterator into which
-		 * the next value will be deserialized.
-		 */
-
 		if (this.heap.size() > 0) {
 			// get the smallest element
 			final HeadStream<E> top = this.heap.peek();
-			E result = top.getHead();
+			E result = top.getHead(reuse);
 
 			// read an element
-			if (!top.nextHead(reuse)) {
+			if (!top.nextHead()) {
 				this.heap.poll();
 			} else {
 				this.heap.adjustTop();
@@ -96,7 +84,7 @@ public class MergeIterator<E> implements MutableObjectIterator<E> {
 
 	/**
 	 * Gets the next smallest element, with respect to the definition of order implied by
-	 * the {@link TypeSerializer} provided to this iterator.
+	 * the {@link TypeComparator} provided to this iterator.
 	 *
 	 * @return The next element if the iterator has another element, null otherwise.
 	 *
@@ -131,12 +119,15 @@ public class MergeIterator<E> implements MutableObjectIterator<E> {
 		private final MutableObjectIterator<E> iterator;
 		
 		private final TypeComparator<E> comparator;
+		private final TypeSerializer<E> serializer;
 		
 		private E head;
 
-		public HeadStream(MutableObjectIterator<E> iterator, TypeComparator<E> comparator) throws IOException {
+		public HeadStream(MutableObjectIterator<E> iterator, TypeComparator<E> comparator, TypeSerializer<E> serializer) throws IOException {
 			this.iterator = iterator;
 			this.comparator = comparator;
+			this.serializer = serializer;
+			this.head = serializer.createInstance();
 			
 			if (!nextHead()) {
 				throw new IllegalStateException();
@@ -144,21 +135,15 @@ public class MergeIterator<E> implements MutableObjectIterator<E> {
 		}
 
 		public E getHead() {
-			return this.head;
+			return serializer.copy(this.head);
 		}
 
-		public boolean nextHead(E reuse) throws IOException {
-			if ((this.head = this.iterator.next(reuse)) != null) {
-				this.comparator.setReference(this.head);
-				return true;
-			}
-			else {
-				return false;
-			}
+		public E getHead(E reuse) {
+			return serializer.copy(this.head, reuse);
 		}
 
 		public boolean nextHead() throws IOException {
-			if ((this.head = this.iterator.next()) != null) {
+			if ((this.head = this.iterator.next(this.head)) != null) {
 				this.comparator.setReference(this.head);
 				return true;
 			}

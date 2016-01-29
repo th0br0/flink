@@ -1293,7 +1293,7 @@ public class UnilateralSortMerger<E> implements Sorter<E> {
 				// set lazy iterator
 				setResultIterator(iterators.isEmpty() ? EmptyMutableObjectIterator.<E>get() :
 						iterators.size() == 1 ? iterators.get(0) : 
-						new MergeIterator<E>(iterators, this.comparator));
+						new MergeIterator<E>(iterators, this.comparator, this.serializer.duplicate()));
 				return;
 			}
 			
@@ -1525,7 +1525,7 @@ public class UnilateralSortMerger<E> implements Sorter<E> {
 				iterators.add(largeRecords);
 			}
 
-			return new MergeIterator<E>(iterators, this.comparator);
+			return new MergeIterator<E>(iterators, this.comparator, this.serializer.duplicate());
 		}
 
 		/**

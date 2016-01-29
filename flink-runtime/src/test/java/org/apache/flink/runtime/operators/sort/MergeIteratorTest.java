@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.flink.api.common.typeutils.TypeComparator;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.IntComparator;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.operators.testutils.TestData;
@@ -33,12 +34,14 @@ import org.junit.Test;
 public class MergeIteratorTest {
 	
 	private TypeComparator<Tuple2<Integer, String>> comparator;
+	private TypeSerializer<Tuple2<Integer, String>> serializer;
 	
 	
 	@SuppressWarnings("unchecked")
 	@Before
 	public void setup() {
 		this.comparator = TestData.getIntStringTupleComparator();
+		this.serializer = TestData.getIntStringTupleSerializer();
 	}
 	
 	
@@ -94,7 +97,7 @@ public class MergeIteratorTest {
 		TypeComparator<Integer> comparator = new IntComparator(true);
 
 		// merge iterator
-		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator);
+		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator, this.serializer.duplicate());
 
 		// check expected order
 		Tuple2<Integer, String> rec1 = new Tuple2<>();
@@ -140,7 +143,7 @@ public class MergeIteratorTest {
 		TypeComparator<Integer> comparator = new IntComparator(true);
 
 		// merge iterator
-		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator);
+		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator, this.serializer.duplicate());
 
 		int elementsFound = 1;
 		// check expected order
@@ -181,7 +184,7 @@ public class MergeIteratorTest {
 		TypeComparator<Integer> comparator = new IntComparator(true);
 
 		// merge iterator
-		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator);
+		MutableObjectIterator<Tuple2<Integer, String>> iterator = new MergeIterator<>(iterators, this.comparator, this.serializer.duplicate());
 
 		boolean violationFound = false;
 		
