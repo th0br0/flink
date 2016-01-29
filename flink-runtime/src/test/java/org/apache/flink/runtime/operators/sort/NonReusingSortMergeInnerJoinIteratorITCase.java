@@ -204,8 +204,8 @@ public class NonReusingSortMergeInnerJoinIteratorITCase {
 			inList2.add(gen2Iter);
 			inList2.add(const2Iter);
 
-			MutableObjectIterator<Tuple2<Integer, String>> input1 = new MergeIterator<Tuple2<Integer, String>>(inList1, comparator1.duplicate());
-			MutableObjectIterator<Tuple2<Integer, String>> input2 = new MergeIterator<Tuple2<Integer, String>>(inList2, comparator2.duplicate());
+			MutableObjectIterator<Tuple2<Integer, String>> input1 = new MergeIterator<Tuple2<Integer, String>>(inList1, comparator1.duplicate(), serializer1.duplicate());
+			MutableObjectIterator<Tuple2<Integer, String>> input2 = new MergeIterator<Tuple2<Integer, String>>(inList2, comparator2.duplicate(), serializer2.duplicate());
 			
 			// collect expected data
 			final Map<Integer, Collection<Match>> expectedMatchesMap = matchValues(
@@ -230,8 +230,8 @@ public class NonReusingSortMergeInnerJoinIteratorITCase {
 			inList2.add(gen2Iter);
 			inList2.add(const2Iter);
 	
-			input1 = new MergeIterator<Tuple2<Integer, String>>(inList1, comparator1.duplicate());
-			input2 = new MergeIterator<Tuple2<Integer, String>>(inList2, comparator2.duplicate());
+			input1 = new MergeIterator<Tuple2<Integer, String>>(inList1, comparator1.duplicate(), serializer1.duplicate());
+			input2 = new MergeIterator<Tuple2<Integer, String>>(inList2, comparator2.duplicate(), serializer2.duplicate());
 			
 			final FlatJoinFunction<Tuple2<Integer, String>, Tuple2<Integer, String>, Tuple2<Integer, String>> joinFunction = new MatchRemovingJoiner(expectedMatchesMap);
 			
