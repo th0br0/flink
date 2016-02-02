@@ -3,13 +3,18 @@ package malom;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 
-//-Xmx8g -Xms8g
+
+/**
+ * Run with the first argument being an (already created) output dir, and then the next four arguments should be 3 3 0 0
+ * If you increase memory given to the JVM (-Xmx1g), performance degrades.
+ * You can see that the problem is the GC, with eg. Java Mission Control.
+ */
 
 public class Solver {
 
 	public static void main(String[] args) throws Exception {
 
-		System.out.println("VIGYAZAT! adjmasks atirva!");
+		//System.out.println("VIGYAZAT! adjmasks atirva!");
 		//System.out.println("VIGYAZAT! lose condition atirva!");
 
 
