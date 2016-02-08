@@ -41,14 +41,17 @@ import org.apache.flink.runtime.operators.util.LocalStrategy;
 public final class ReduceProperties extends OperatorDescriptorSingle {
 	
 	private final Partitioner<?> customPartitioner;
+
+	private final DriverStrategy combinerStrategy;
 	
-	public ReduceProperties(FieldSet keys) {
-		this(keys, null);
+	public ReduceProperties(FieldSet keys, DriverStrategy combinerStrategy) {
+		this(keys, null, combinerStrategy);
 	}
 	
-	public ReduceProperties(FieldSet keys, Partitioner<?> customPartitioner) {
+	public ReduceProperties(FieldSet keys, Partitioner<?> customPartitioner, DriverStrategy combinerStrategy) {
 		super(keys);
 		this.customPartitioner = customPartitioner;
+		this.combinerStrategy = combinerStrategy;
 	}
 	
 	@Override
@@ -75,7 +78,7 @@ public final class ReduceProperties extends OperatorDescriptorSingle {
 
 			SingleInputPlanNode combiner = new SingleInputPlanNode(combinerNode,
 								"Combine ("+node.getOperator().getName()+")", toCombiner,
-								DriverStrategy.SORTED_PARTIAL_REDUCE, this.keyList);
+								this.combinerStrategy, this.keyList);
 
 			combiner.setCosts(new Costs(0, 0));
 			combiner.initProperties(toCombiner.getGlobalProperties(), toCombiner.getLocalProperties());
