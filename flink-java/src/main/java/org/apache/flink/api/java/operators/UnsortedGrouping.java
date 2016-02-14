@@ -147,8 +147,8 @@ public class UnsortedGrouping<T> extends Grouping<T> {
 	 * A ReduceFunction combines two elements into one new element of the same type.
 	 *
 	 * @param reducer The ReduceFunction that is applied on each group of the DataSet.
-	 * @param strategy The strategy that should be used execute the reduce. If {@code null} is given, then the
-	 *                 optimizer will pick the reduce strategy.
+	 * @param strategy The strategy that should be used to execute the combine phase of the reduce.
+	 *                 If {@code null} is given, then the optimizer will pick the strategy.
 	 * @return A ReduceOperator that represents the reduced DataSet.
 	 *
 	 * @see org.apache.flink.api.common.functions.RichReduceFunction
@@ -248,7 +248,7 @@ public class UnsortedGrouping<T> extends Grouping<T> {
 	 * A ReduceFunction combines two elements into one new element of the same type.
 	 *
 	 * @param fields Keys taken into account for finding the minimum.
-	 * @param strategy The strategy that should be used execute the minBy. If {@code null} is given, then the
+	 * @param strategy The strategy that should be used to execute the minBy. If {@code null} is given, then the
 	 *                 optimizer will pick the strategy.
 	 * @return A {@link ReduceOperator} representing the minimum.
 	 */
@@ -288,7 +288,7 @@ public class UnsortedGrouping<T> extends Grouping<T> {
 	 * A ReduceFunction combines two elements into one new element of the same type.
 	 *
 	 * @param fields Keys taken into account for finding the minimum.
-	 * @param strategy The strategy that should be used execute the maxBy. If {@code null} is given, then the
+	 * @param strategy The strategy that should be used to execute the maxBy. If {@code null} is given, then the
 	 *                 optimizer will pick the strategy.
 	 * @return A {@link ReduceOperator} representing the minimum.
 	 */
