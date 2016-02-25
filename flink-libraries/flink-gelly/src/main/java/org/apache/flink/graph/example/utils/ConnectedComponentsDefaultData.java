@@ -32,7 +32,7 @@ import java.util.List;
  */
 public class ConnectedComponentsDefaultData {
 
-	public static final Integer MAX_ITERATIONS = 4;
+	public static final Integer MAX_ITERATIONS = 4000000;
 
 	public static final String EDGES = "1	2\n" + "2	3\n" + "2	4\n" + "3	4";
 

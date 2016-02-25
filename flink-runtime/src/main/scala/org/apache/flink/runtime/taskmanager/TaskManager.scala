@@ -1710,6 +1710,10 @@ object TaskManager {
       ConfigConstants.TASK_MANAGER_MEMORY_PRE_ALLOCATE_KEY,
       ConfigConstants.DEFAULT_TASK_MANAGER_MEMORY_PRE_ALLOCATE)
 
+    //val preAllocateMemory = true
+
+
+
     val memorySize = if (configuredMemory > 0) {
       if (preAllocateMemory) {
         LOG.info(s"Using $configuredMemory MB for managed memory.")

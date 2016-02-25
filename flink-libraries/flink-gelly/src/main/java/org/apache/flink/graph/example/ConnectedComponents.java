@@ -30,6 +30,9 @@ import org.apache.flink.graph.example.utils.ConnectedComponentsDefaultData;
 import org.apache.flink.graph.library.GSAConnectedComponents;
 import org.apache.flink.types.NullValue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * This example shows how to use Gelly's library methods.
  * You can find all available library methods in {@link org.apache.flink.graph.library}. 
@@ -71,6 +74,12 @@ public class ConnectedComponents implements ProgramDescription {
 		DataSet<Vertex<Long, Long>> verticesWithMinIds = graph
 				.run(new GSAConnectedComponents<Long, NullValue>(maxIterations));
 
+
+		//System.in.read();
+
+		System.out.println("start");
+		long start = System.currentTimeMillis();
+
 		// emit result
 		if (fileOutput) {
 			verticesWithMinIds.writeAsCsv(outputPath, "\n", ",");
@@ -80,6 +89,9 @@ public class ConnectedComponents implements ProgramDescription {
 		} else {
 			verticesWithMinIds.print();
 		}
+
+		long end = System.currentTimeMillis();
+		System.out.println("stop, time: " + (end - start));
 	}
 
 	@Override
@@ -135,7 +147,13 @@ public class ConnectedComponents implements ProgramDescription {
 						}
 					});
 		} else {
-			return ConnectedComponentsDefaultData.getDefaultEdgeDataSet(env);
+			//return ConnectedComponentsDefaultData.getDefaultEdgeDataSet(env);
+
+			List<Edge<Long, NullValue>> edges = new ArrayList<>();
+			for(long i=0; i<1000; i++){
+				edges.add(new Edge<Long, NullValue>(i, i+1, NullValue.getInstance()));
+			}
+			return env.fromCollection(edges);
 		}
 	}
 }
