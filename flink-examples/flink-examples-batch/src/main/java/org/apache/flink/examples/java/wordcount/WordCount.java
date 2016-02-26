@@ -21,10 +21,14 @@ package org.apache.flink.examples.java.wordcount;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.examples.java.wordcount.util.WordCountData;
 import org.apache.flink.util.Collector;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Implements the "WordCount" program that computes a simple word occurrence histogram
@@ -52,46 +56,65 @@ public class WordCount {
 	// *************************************************************************
 	//     PROGRAM
 	// *************************************************************************
-	
+
+	public static class Foo extends Tuple1<Integer> {
+		public byte a;
+		public Foo(int f0, int a) {
+			this.f0 = f0;
+			this.a = (byte)a;
+		}
+	}
+
 	public static void main(String[] args) throws Exception {
 
-		final ParameterTool params = ParameterTool.fromArgs(args);
 
-		// set up the execution environment
+
 		final ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+		List<Tuple1<Integer>> l = new ArrayList<Tuple1<Integer>>();
+		l.add(new Foo(1, 2));
+		l.add(new Foo(3, 4));
+		env.fromCollection(l).print();
 
-		// make parameters available in the web interface
-		env.getConfig().setGlobalJobParameters(params);
-		System.out.println("Usage: WordCount --input <path> --output <path>");
 
-		// get input data
-		DataSet<String> text;
-		if (params.has("input")) {
-			// read the text file from given input path
-			text = env.readTextFile(params.get("input"));
-		} else {
-			// get default test text data
-			System.out.println("Executing WordCount example with default input data set.");
-			System.out.println("Use --input to specify file input.");
-			text = WordCountData.getDefaultTextLineDataSet(env);
-		}
 
-		DataSet<Tuple2<String, Integer>> counts = 
-				// split up the lines in pairs (2-tuples) containing: (word,1)
-				text.flatMap(new Tokenizer())
-				// group by the tuple field "0" and sum up tuple field "1"
-				.groupBy(0)
-				.sum(1);
 
-		// emit result
-		if (params.has("output")) {
-			counts.writeAsCsv(params.get("output"), "\n", " ");
-			// execute program
-			env.execute("WordCount Example");
-		} else {
-			System.out.println("Printing result to stdout. Use --output to specify output path.");
-			counts.print();
-		}
+//		final ParameterTool params = ParameterTool.fromArgs(args);
+//
+//		// set up the execution environment
+//		final ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+//
+//		// make parameters available in the web interface
+//		env.getConfig().setGlobalJobParameters(params);
+//		System.out.println("Usage: WordCount --input <path> --output <path>");
+//
+//		// get input data
+//		DataSet<String> text;
+//		if (params.has("input")) {
+//			// read the text file from given input path
+//			text = env.readTextFile(params.get("input"));
+//		} else {
+//			// get default test text data
+//			System.out.println("Executing WordCount example with default input data set.");
+//			System.out.println("Use --input to specify file input.");
+//			text = WordCountData.getDefaultTextLineDataSet(env);
+//		}
+//
+//		DataSet<Tuple2<String, Integer>> counts =
+//				// split up the lines in pairs (2-tuples) containing: (word,1)
+//				text.flatMap(new Tokenizer())
+//				// group by the tuple field "0" and sum up tuple field "1"
+//				.groupBy(0)
+//				.sum(1);
+//
+//		// emit result
+//		if (params.has("output")) {
+//			counts.writeAsCsv(params.get("output"), "\n", " ");
+//			// execute program
+//			env.execute("WordCount Example");
+//		} else {
+//			System.out.println("Printing result to stdout. Use --output to specify output path.");
+//			counts.print();
+//		}
 
 	}
 	
