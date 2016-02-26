@@ -19,6 +19,8 @@
 package org.apache.flink.examples.java.wordcount;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.tuple.Tuple1;
@@ -58,10 +60,18 @@ public class WordCount {
 	// *************************************************************************
 
 	public static class Foo extends Tuple1<Integer> {
-		public byte a;
+		public short a;
+
+		public Foo() {}
+
 		public Foo(int f0, int a) {
 			this.f0 = f0;
-			this.a = (byte)a;
+			this.a = (short)a;
+		}
+
+		@Override
+		public String toString() {
+			return "(" + f0 + ", " + a + ")";
 		}
 	}
 
@@ -70,10 +80,32 @@ public class WordCount {
 
 
 		final ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		List<Tuple1<Integer>> l = new ArrayList<Tuple1<Integer>>();
-		l.add(new Foo(1, 2));
-		l.add(new Foo(3, 4));
-		env.fromCollection(l).print();
+
+//		List<Tuple1<Integer>> l = new ArrayList<Tuple1<Integer>>();
+//		//List<Foo> l = new ArrayList<Foo>();
+//		l.add(new Foo(1, 2));
+//		l.add(new Foo(3, 4));
+//		env.fromCollection(l).print();
+
+
+
+env.fromElements(0,0,0).map(new MapFunction<Integer, Tuple1<Integer>>() {
+	@Override
+	public Tuple1<Integer> map(Integer value) throws Exception {
+		return new Foo(5, 6);
+	}
+}).print();
+
+
+//		env.fromElements(0,0).map(new MapFunction<Integer, Foo>() {
+//			@Override
+//			public Foo map(Integer value) throws Exception {
+//				return new Foo(123456789, 9876);
+//			}
+//		}).print();
+
+
+
 
 
 
