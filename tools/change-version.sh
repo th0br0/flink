@@ -17,9 +17,8 @@
 # limitations under the License.
 ################################################################################
 
-OLD="1.0-SNAPSHOT"
-NEW="1.1-SNAPSHOT"
-
+OLD="1.1-SNAPSHOT"
+NEW="1.1-FLINK-3477"
 
 HERE=` basename "$PWD"`
 if [[ "$HERE" != "tools" ]]; then
