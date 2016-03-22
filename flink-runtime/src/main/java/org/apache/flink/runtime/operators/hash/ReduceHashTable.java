@@ -164,6 +164,8 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 */
 	private boolean enableResize;
 
+	private long numEmissions, numEmittedRecords;
+
 
 	/**
 	 * This constructor is for the case when will only call those operations that are also
@@ -223,6 +225,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 		stagingSegments.add(forcedAllocateSegment());
 
 		reuse = buildSideSerializer.createInstance();
+
+		numEmissions = 0;
+		numEmittedRecords = 0;
 	}
 
 	/**
@@ -241,6 +246,9 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 				return;
 			}
 			closed = true;
+
+			LOG.info("numEmissions: " + numEmissions);
+			LOG.info("Total number of tuples sent: " + numEmittedRecords);
 		}
 
 		LOG.debug("Closing ReduceHashTable and releasing resources.");
@@ -539,10 +547,14 @@ public class ReduceHashTable<T> extends AbstractMutableHashTable<T> {
 	 * Emits all elements currently held by the table to the collector.
 	 */
 	public void emit() throws IOException {
+
+		numEmissions++;
+
 		T record = buildSideSerializer.createInstance();
 		EntryIterator iter = getEntryIterator();
 		while ((record = iter.next(record)) != null && !closed) {
 			outputCollector.collect(record);
+			numEmittedRecords++;
 			if (!objectReuseEnabled) {
 				record = buildSideSerializer.createInstance();
 			}

@@ -75,6 +75,8 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 
 	private volatile boolean canceled;
 
+	private long numEmissions, numEmittedRecords;
+
 	// ------------------------------------------------------------------------
 
 	@Override
@@ -129,6 +131,9 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 				table.open();
 				break;
 		}
+
+		numEmissions = 0;
+		numEmittedRecords = 0;
 	}
 
 	@Override
@@ -175,6 +180,9 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 	}
 
 	private void sortAndCombine() throws Exception {
+
+		numEmissions++;
+
 		final InMemorySorter<T> sorter = this.sorter;
 
 		if (!sorter.isEmpty()) {
@@ -221,6 +229,7 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 					}
 
 					output.collect(value);
+					numEmittedRecords++;
 
 					// swap the value from the new key group into the first object
 					T tmp = reuse1;
@@ -249,6 +258,7 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 					}
 
 					output.collect(res);
+					numEmittedRecords++;
 				}
 			}
 		}
@@ -261,6 +271,8 @@ public class ChainedReduceCombineDriver<T> extends ChainedDriver<T, T> {
 			switch (strategy) {
 				case SORTED_PARTIAL_REDUCE:
 					sortAndCombine();
+					LOG.info("numEmissions: " + numEmissions);
+					LOG.info("Total number of tuples sent: " + numEmittedRecords);
 					break;
 				case HASHED_PARTIAL_REDUCE:
 					table.emit();

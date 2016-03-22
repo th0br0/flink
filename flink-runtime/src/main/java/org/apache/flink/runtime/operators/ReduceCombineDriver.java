@@ -86,6 +86,8 @@ public class ReduceCombineDriver<T> implements Driver<ReduceFunction<T>, T> {
 	public void setup(TaskContext<ReduceFunction<T>, T> context) {
 		taskContext = context;
 		canceled = false;
+
+		throw new RuntimeException("Only the chained version (ChainedReduceCombineDriver) should be used during the experiments.");
 	}
 
 	@Override
