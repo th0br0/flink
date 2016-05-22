@@ -293,12 +293,12 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current sum of the pojo data
+	 * Applies an aggregation that gives the current sum of the pojo data
 	 * stream at the given field expressionby the given key. An independent
 	 * aggregate is kept per key. A field expression is either the name of a
 	 * public field or a getter method with parentheses of the
 	 * {@link DataStream}S underlying type. A dot can be used to drill down into
-	 * objects, as in {@code "field1.getInnerField2()" }.
+	 * objects, as in {@code "field1.fieldxy" }.
 	 *
 	 * @param field
 	 *            The field expression based on which the aggregation will be
@@ -310,7 +310,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current minimum of the data
+	 * Applies an aggregation that gives the current minimum of the data
 	 * stream at the given position by the given key. An independent aggregate
 	 * is kept per key.
 	 *
@@ -324,12 +324,12 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current minimum of the pojo
+	 * Applies an aggregation that gives the current minimum of the pojo
 	 * data stream at the given field expression by the given key. An
 	 * independent aggregate is kept per key. A field expression is either the
 	 * name of a public field or a getter method with parentheses of the
 	 * {@link DataStream}S underlying type. A dot can be used to drill down into
-	 * objects, as in {@code "field1.getInnerField2()" }.
+	 * objects, as in {@code "field1.fieldxy" }.
 	 *
 	 * @param field
 	 *            The field expression based on which the aggregation will be
@@ -356,12 +356,12 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current maximum of the pojo
+	 * Applies an aggregation that gives the current maximum of the pojo
 	 * data stream at the given field expression by the given key. An
 	 * independent aggregate is kept per key. A field expression is either the
 	 * name of a public field or a getter method with parentheses of the
 	 * {@link DataStream}S underlying type. A dot can be used to drill down into
-	 * objects, as in {@code "field1.getInnerField2()" }.
+	 * objects, as in {@code "field1.fieldxy" }.
 	 *
 	 * @param field
 	 *            The field expression based on which the aggregation will be
@@ -374,12 +374,12 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current minimum element of the
+	 * Applies an aggregation that gives the current minimum element of the
 	 * pojo data stream by the given field expression by the given key. An
 	 * independent aggregate is kept per key. A field expression is either the
 	 * name of a public field or a getter method with parentheses of the
 	 * {@link DataStream}S underlying type. A dot can be used to drill down into
-	 * objects, as in {@code "field1.getInnerField2()" }.
+	 * objects, as in {@code "field1.fieldxy" }.
 	 *
 	 * @param field
 	 *            The field expression based on which the aggregation will be
@@ -396,12 +396,12 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current maximum element of the
+	 * Applies an aggregation that gives the current maximum element of the
 	 * pojo data stream by the given field expression by the given key. An
 	 * independent aggregate is kept per key. A field expression is either the
 	 * name of a public field or a getter method with parentheses of the
 	 * {@link DataStream}S underlying type. A dot can be used to drill down into
-	 * objects, as in {@code "field1.getInnerField2()" }.
+	 * objects, as in {@code "field1.fieldxy" }.
 	 *
 	 * @param field
 	 *            The field expression based on which the aggregation will be
@@ -417,7 +417,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * minimum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the minimum value at the
 	 * given position, the operator returns the first one by default.
@@ -431,7 +431,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * minimum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the minimum value at the
 	 * given position, the operator returns the first one by default.
@@ -445,7 +445,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * minimum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the minimum value at the
 	 * given position, the operator returns either the first or last one,
@@ -464,7 +464,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * maximum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the maximum value at the
 	 * given position, the operator returns the first one by default.
@@ -478,7 +478,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * maximum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the maximum value at the
 	 * given position, the operator returns the first one by default.
@@ -492,7 +492,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	}
 
 	/**
-	 * Applies an aggregation that that gives the current element with the
+	 * Applies an aggregation that gives the current element with the
 	 * maximum value at the given position by the given key. An independent
 	 * aggregate is kept per key. If more elements have the maximum value at the
 	 * given position, the operator returns either the first or last one,

@@ -140,17 +140,6 @@ public class DataStreamPojoITCase extends StreamingMultipleProgramsTestBase {
 	}
 
 
-	/**
-	 * As per FLINK-3702 Flink doesn't support nested pojo fields for sum()
-	 */
-	@Test(expected = IllegalArgumentException.class)
-	public void testFailOnNestedPojoFieldAccessor() throws Exception {
-		StreamExecutionEnvironment see = StreamExecutionEnvironment.getExecutionEnvironment();
-
-		DataStream<Data> dataStream = see.fromCollection(elements);
-		dataStream.keyBy("aaa", "stats.count").sum("stats.count");
-	}
-
 	public static class Data {
 		public int sum; // sum
 		public int aaa; // keyBy

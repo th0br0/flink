@@ -22,6 +22,7 @@ import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.Public;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.typeutils.FieldAccessor;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 
 import java.io.Serializable;
@@ -159,6 +160,53 @@ public abstract class TypeInformation<T> implements Serializable {
 	 */
 	@PublicEvolving
 	public abstract TypeSerializer<T> createSerializer(ExecutionConfig config);
+
+
+	/**
+	 * Creates a {@link FieldAccessor} for the given field position, which can be used to get and set
+	 * the specified field on instances of this type.
+	 *
+	 * @param pos The field position
+	 * @param config Configuration object
+	 * @param <F> The type of the field to access
+	 * @return The created FieldAccessor
+	 */
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(int pos, ExecutionConfig config){
+		throw new InvalidFieldReferenceException("Cannot reference field by position on " + this.toString()
+			+ "Referencing a field by position is supported on tuples, case classes, and arrays. "
+			+ "Additionally, you can select the 0th field of a primitive/basic type (e.g. int).");
+	}
+
+	/**
+	 * Creates a {@link FieldAccessor} for the field that is given by a field expression,
+	 * which can be used to get and set the specified field on instances of this type.
+	 *
+	 * @see <a href="https://ci.apache.org/projects/flink/flink-docs-master/apis/common/index.html#define-keys-using-field-expressions">
+	 *     Defining keys using Field Expressions</a>
+	 *
+	 * @param field The field expression
+	 * @param config Configuration object
+	 * @param <F> The type of the field to access
+	 * @return The created FieldAccessor
+	 */
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(String field, ExecutionConfig config) {
+		throw new InvalidFieldReferenceException("Cannot reference field by field expression on " + this.toString()
+				+ "Field expressions are only supported on POJO types, tuples, and case classes. "
+				+ "For the requirements for a type to be considered a POJO, see "
+				+ "https://ci.apache.org/projects/flink/flink-docs-master/apis/common/index.html#pojos");
+	}
+
+	@PublicEvolving
+	public static class InvalidFieldReferenceException extends IllegalArgumentException {
+
+		private static final long serialVersionUID = 1L;
+
+		public InvalidFieldReferenceException(String s) {
+			super(s);
+		}
+	}
 
 	@Override
 	public abstract String toString();

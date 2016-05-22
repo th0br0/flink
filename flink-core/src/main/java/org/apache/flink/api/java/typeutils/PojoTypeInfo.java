@@ -39,7 +39,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -60,15 +59,6 @@ import static org.apache.flink.util.Preconditions.checkState;
 public class PojoTypeInfo<T> extends CompositeType<T> {
 	
 	private static final long serialVersionUID = 1L;
-
-	private final static String REGEX_FIELD = "[\\p{L}_\\$][\\p{L}\\p{Digit}_\\$]*";
-	private final static String REGEX_NESTED_FIELDS = "("+REGEX_FIELD+")(\\.(.+))?";
-	private final static String REGEX_NESTED_FIELDS_WILDCARD = REGEX_NESTED_FIELDS
-			+"|\\"+ExpressionKeys.SELECT_ALL_CHAR
-			+"|\\"+ExpressionKeys.SELECT_ALL_CHAR_SCALA;
-
-	private static final Pattern PATTERN_NESTED_FIELDS = Pattern.compile(REGEX_NESTED_FIELDS);
-	private static final Pattern PATTERN_NESTED_FIELDS_WILDCARD = Pattern.compile(REGEX_NESTED_FIELDS_WILDCARD);
 
 	private final PojoField[] fields;
 	
@@ -138,7 +128,7 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 	@PublicEvolving
 	public void getFlatFields(String fieldExpression, int offset, List<FlatFieldDescriptor> result) {
 
-		Matcher matcher = PATTERN_NESTED_FIELDS_WILDCARD.matcher(fieldExpression);
+		Matcher matcher = FieldAccessor.PATTERN_NESTED_FIELDS_WILDCARD.matcher(fieldExpression);
 		if(!matcher.matches()) {
 			throw new InvalidFieldReferenceException("Invalid POJO field reference \""+fieldExpression+"\".");
 		}
@@ -215,7 +205,7 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 	@PublicEvolving
 	public <X> TypeInformation<X> getTypeAt(String fieldExpression) {
 
-		Matcher matcher = PATTERN_NESTED_FIELDS.matcher(fieldExpression);
+		Matcher matcher = FieldAccessor.PATTERN_NESTED_FIELDS.matcher(fieldExpression);
 		if(!matcher.matches()) {
 			if (fieldExpression.startsWith(ExpressionKeys.SELECT_ALL_CHAR) || fieldExpression.startsWith(ExpressionKeys.SELECT_ALL_CHAR_SCALA)) {
 				throw new InvalidFieldReferenceException("Wildcard expressions are not allowed here.");
@@ -264,6 +254,7 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 	}
 
 	@Override
+	@PublicEvolving
 	protected TypeComparatorBuilder<T> createTypeComparatorBuilder() {
 		return new PojoTypeComparatorBuilder();
 	}
@@ -317,7 +308,39 @@ public class PojoTypeInfo<T> extends CompositeType<T> {
 
 		return new PojoSerializer<T>(getTypeClass(), fieldSerializers, reflectiveFields, config);
 	}
-	
+
+	@Override
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(String fieldExpression, ExecutionConfig config) {
+		
+		FieldAccessor.FieldExpressionDecomposition decomp = FieldAccessor.decomposeFieldExpression(fieldExpression);
+
+		// get field
+		PojoField field = null;
+		TypeInformation<?> fieldType = null;
+		for (int i = 0; i < fields.length; i++) {
+			if (fields[i].getField().getName().equals(decomp.head)) {
+				field = fields[i];
+				fieldType = fields[i].getTypeInformation();
+				break;
+			}
+		}
+		if (field == null) {
+			throw new InvalidFieldReferenceException("Unable to find field \""+decomp.head+"\" in type "+this+".");
+		}
+
+		if(decomp.tail == null) {
+			@SuppressWarnings("unchecked")
+			FieldAccessor<F,F> innerAccessor = new FieldAccessor.SimpleFieldAccessor<F>((TypeInformation<F>) fieldType);
+			return new FieldAccessor.PojoFieldAccessor<T, F, F>(field.getField(), innerAccessor);
+		} else {
+			@SuppressWarnings("unchecked")
+			FieldAccessor<Object,F> innerAccessor =
+					(FieldAccessor<Object,F>)fieldType.<F>getFieldAccessor(decomp.tail, config);
+			return new FieldAccessor.PojoFieldAccessor<T, Object, F>(field.getField(), innerAccessor);
+		}
+	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if (obj instanceof PojoTypeInfo) {

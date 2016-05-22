@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.operators.Keys.ExpressionKeys;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.CompositeType;
@@ -203,7 +205,26 @@ public abstract class TupleTypeInfoBase<T> extends CompositeType<T> {
 		TypeInformation<X> typed = (TypeInformation<X>) this.types[pos];
 		return typed;
 	}
-	
+
+	@Override
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(int pos, ExecutionConfig config) {
+		return new FieldAccessor.SimpleTupleFieldAccessor<T, F>(pos, this);
+	}
+
+	@Override
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(String fieldExpression, ExecutionConfig config) {
+		FieldAccessor.FieldExpressionDecomposition decomp = FieldAccessor.decomposeFieldExpression(fieldExpression);
+		int FieldPos = this.getFieldIndex(decomp.head);
+		if(decomp.tail == null) {
+			return new FieldAccessor.SimpleTupleFieldAccessor<T, F>(FieldPos, this);
+		} else {
+			FieldAccessor<Object,F> innerAccessor = getTypeAt(FieldPos).getFieldAccessor(decomp.tail, config);
+			return new FieldAccessor.RecursiveTupleFieldAccessor<T, Object, F>(FieldPos, innerAccessor);
+		}
+	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if (obj instanceof TupleTypeInfoBase) {

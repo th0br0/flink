@@ -58,6 +58,7 @@ import org.apache.flink.api.common.typeutils.base.ShortSerializer;
 import org.apache.flink.api.common.typeutils.base.StringComparator;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
+import org.apache.flink.api.java.typeutils.FieldAccessor;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -169,6 +170,23 @@ public class BasicTypeInfo<T> extends TypeInformation<T> implements AtomicType<T
 		} else {
 			throw new InvalidTypesException("The type " + clazz.getSimpleName() + " cannot be used as a key.");
 		}
+	}
+
+	@Override
+	@PublicEvolving
+	@SuppressWarnings("unchecked")
+	public <F> FieldAccessor<T, F> getFieldAccessor(int pos, ExecutionConfig config) {
+		if(pos != 0) {
+			throw new InvalidFieldReferenceException("Not the 0th field selected for a basic type.");
+		}
+		return (FieldAccessor<T, F>) new FieldAccessor.SimpleFieldAccessor<T>(this);
+	}
+
+	@Override
+	@PublicEvolving
+	public <F> FieldAccessor<T, F> getFieldAccessor(String field, ExecutionConfig config) {
+		throw new InvalidFieldReferenceException("Field expressions are not supported on basic types."
+			+ "(However, you can select the \"0th field\", which means selecting the entire basic type.)");
 	}
 
 	// --------------------------------------------------------------------------------------------
