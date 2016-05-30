@@ -283,25 +283,12 @@ class GroupedDataSet[T: ClassTag](
   }
 
   /**
-    * Creates a new [[DataSet]] by merging the elements of each group (elements with the same key)
-    * using an associative reduce function.
-    */
-  def reduce(fun: (T, T) => T): DataSet[T] = {
-    reduce(getCallLocationName(), fun, CombineHint.OPTIMIZER_CHOOSES)
-  }
-
-  /**
-   * Special [[reduce]] operation for explicitly telling the system what strategy to use for the
-   * combine phase.
-   * If null is given as the strategy, then the optimizer will pick the strategy.
+   * Creates a new [[DataSet]] by merging the elements of each group (elements with the same key)
+   * using an associative reduce function.
+   *
+   * The strategy used for the combine phase of the reduce can optionally be specified.
    */
-  def reduce(fun: (T, T) => T, strategy: CombineHint): DataSet[T] = {
-    reduce(getCallLocationName(), fun, strategy)
-  }
-
-  private def reduce(callLocationName: String,
-                     fun: (T, T) => T,
-                     strategy: CombineHint): DataSet[T] = {
+  def reduce(fun: (T, T) => T, strategy: CombineHint = CombineHint.OPTIMIZER_CHOOSES): DataSet[T] = {
     require(fun != null, "Reduce function must not be null.")
     val reducer = new ReduceFunction[T] {
       val cleanFun = set.clean(fun)
@@ -309,31 +296,18 @@ class GroupedDataSet[T: ClassTag](
         cleanFun(v1, v2)
       }
     }
-    reduce(callLocationName, reducer, strategy)
+    wrap(new ReduceOperator[T](createUnsortedGrouping(), reducer, getCallLocationName()))
   }
 
   /**
-    * Creates a new [[DataSet]] by merging the elements of each group (elements with the same key)
-    * using an associative reduce function.
-    */
-  def reduce(reducer: ReduceFunction[T]): DataSet[T] = {
-    reduce(getCallLocationName(), reducer, CombineHint.OPTIMIZER_CHOOSES)
-  }
-
-  /**
-    * Special [[reduce]] operation for explicitly telling the system what strategy to use for the
-    * combine phase.
-    * If null is given as the strategy, then the optimizer will pick the strategy.
-    */
-  def reduce(reducer: ReduceFunction[T], strategy: CombineHint): DataSet[T] = {
-    reduce(getCallLocationName(), reducer, strategy)
-  }
-
-  private def reduce(callLocationName: String,
-                     reducer: ReduceFunction[T],
-                     strategy: CombineHint): DataSet[T] = {
+   * Creates a new [[DataSet]] by merging the elements of each group (elements with the same key)
+   * using an associative reduce function.
+   *
+   * The strategy used for the combine phase of the reduce can optionally be specified.
+   */
+  def reduce(reducer: ReduceFunction[T], strategy: CombineHint = CombineHint.OPTIMIZER_CHOOSES): DataSet[T] = {
     require(reducer != null, "Reduce function must not be null.")
-    wrap(new ReduceOperator[T](createUnsortedGrouping(), reducer, callLocationName).setCombineHint(strategy))
+    wrap(new ReduceOperator[T](createUnsortedGrouping(), reducer, getCallLocationName()))
   }
 
   /**
